@@ -70,6 +70,8 @@ const Navbar = () => {
                             <>
                                 {navLink("/dashboard", "Dashboard")}
                                 {navLink("/profile", "Profile")}
+                                {navLink("/analyze", "Analyze")}
+                                {navLink("/results", "Results")}
 
                                 {/* User info + Logout */}
                                 <div className="flex items-center space-x-4 ml-4 pl-4 border-l border-gray-700">
