@@ -34,6 +34,7 @@ import NotFound from './pages/NotFound';
 import CreateClass from './pages/Teachers/CreateClass';
 import MyClass from './pages/Teachers/MyClass';
 import StudentRequest from './pages/Teachers/StudentRequest';
+import Assignments from './pages/Teachers/Assignments';
 
 function App() {
   return (
@@ -144,6 +145,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['TEACHER']}>
                   <StudentRequest  />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/teacherDashboard/assignment"
+              element={
+                <ProtectedRoute allowedRoles={['TEACHER']}>
+                  <Assignments />
                 </ProtectedRoute>
               }
             />
