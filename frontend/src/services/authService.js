@@ -3,16 +3,18 @@ import { jwtDecode } from 'jwt-decode';
 
 class AuthService {
     // Login
-    async login(username, password) {
+    async login(email, password) {
+        console.log(email, password)
         try {
             const response = await api.post('/auth/login/', {
-                username,
+                email,
                 password,
             });
 
             if (response.data.access) {
                 localStorage.setItem('access_token', response.data.access);
                 localStorage.setItem('refresh_token', response.data.refresh);
+                localStorage.setItem('role', response.data.user.role);
             }
 
             return response.data;
@@ -41,6 +43,7 @@ class AuthService {
         } finally {
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
+            localStorage.removeItem('role');
         }
     }
 
@@ -89,19 +92,10 @@ class AuthService {
     async getUserProfile() {
         try {
             const response = await api.get('/users/profile/');
+            console.log(response)
             return response.data;
         } catch (error) {
             throw error.response?.data || { detail: 'Failed to fetch profile' };
-        }
-    }
-
-    // Get Dashboard Data
-    async getDashboardData() {
-        try {
-            const response = await api.get('/users/dashboard/');
-            return response.data;
-        } catch (error) {
-            throw error.response?.data || { detail: 'Failed to fetch dashboard data' };
         }
     }
 

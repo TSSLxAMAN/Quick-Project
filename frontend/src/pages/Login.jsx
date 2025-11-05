@@ -5,9 +5,10 @@ import { useAuth } from '../utils/AuthContext';
 const Login = () => {
     const location = useLocation();
     const [formData, setFormData] = useState({
-        username: '',
+        email: '',
         password: '',
     });
+    // console.log(formData)
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const successMessage = location.state?.message;
@@ -27,7 +28,7 @@ const Login = () => {
         setError('');
         setLoading(true);
 
-        const result = await login(formData.username, formData.password);
+        const result = await login(formData.email, formData.password);
 
         if (result.success) {
             navigate('/dashboard');
@@ -66,13 +67,13 @@ const Login = () => {
                         <form onSubmit={handleSubmit} className="space-y-5">
                             <div>
                                 <label htmlFor="username" className="block text-gray-300 font-medium mb-2">
-                                    Username
+                                    Email
                                 </label>
                                 <input
                                     type="text"
-                                    id="username"
-                                    name="username"
-                                    value={formData.username}
+                                    id="email"
+                                    name="email"
+                                    value={formData.email}
                                     onChange={handleChange}
                                     required
                                     className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-lg text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"

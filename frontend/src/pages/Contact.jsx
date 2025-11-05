@@ -34,9 +34,9 @@ const Contact = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900 text-gray-100">
+        <div className="min-h-screen py-5 text-gray-100">
             {/* Hero Section */}
-            <section className="bg-gradient-to-b from-gray-800 to-gray-900 py-20 px-6 md:px-12 lg:px-20">
+            <section className=" px-6 md:px-12 lg:px-20 py-5">
                 <div className="max-w-6xl mx-auto text-center">
                     <h1 className="text-4xl md:text-5xl font-extrabold mb-6 bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">
                         Get In Touch
@@ -48,7 +48,7 @@ const Contact = () => {
             </section>
 
             {/* Contact Form & Info Section */}
-            <section className="py-16 px-6 md:px-12 lg:px-20 bg-gray-900">
+            <section className="py-16 px-6 md:px-12 lg:px-2">
                 <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12">
                     {/* Contact Form */}
                     <div>

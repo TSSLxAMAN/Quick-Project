@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../utils/AuthContext.jsx";
+import Logo from '../assets/logo.png'
 
 const MenuIcon = (props) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6" {...props}>
@@ -14,17 +15,12 @@ const XMarkIcon = (props) => (
     </svg>
 );
 
-const UserCircleIcon = (props) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 inline mr-1" {...props}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0012 15.75a7.488 7.488 0 00-5.982 2.975m11.963 0A8.966 8.966 0 0112 21a8.966 8.966 0 01-5.982-2.275M15 9.75a3 3 0 11-6 0 3 3 0 016 0z" />
-    </svg>
-);
 
 const Navbar = () => {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const { user, logout, isAuthenticated } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation(); // to detect active route
+    const location = useLocation();
 
     const handleLogout = async () => {
         await logout();
@@ -55,8 +51,9 @@ const Navbar = () => {
                     {/* Logo */}
                     <Link
                         to="/"
-                        className="text-2xl font-extrabold tracking-tight text-indigo-400 transform hover:scale-[1.03] transition-transform duration-200 ease-out"
+                        className="text-2xl font-extrabold tracking-tight text-indigo-400 transform hover:scale-[1.03] transition-transform duration-200 ease-out flex "
                     >
+                        <img src={Logo} className="h-8 w-8 mx-3" />
                         AssignMatch
                     </Link>
 
@@ -70,13 +67,12 @@ const Navbar = () => {
                             <>
                                 {navLink("/dashboard", "Dashboard")}
                                 {navLink("/profile", "Profile")}
-                                {navLink("/analyze", "Analyze")}
-                                {navLink("/results", "Results")}
+                                
 
                                 {/* User info + Logout */}
                                 <div className="flex items-center space-x-4 ml-4 pl-4 border-l border-gray-700">
                                     <span className="text-gray-300 text-sm flex items-center">
-                                        <UserCircleIcon className="w-5 h-5 mr-1 text-indigo-400" />
+                                        
                                         {user?.username}{" "}
                                         (<span className="text-indigo-400 font-semibold">{user?.role}</span>)
                                     </span>
@@ -95,7 +91,7 @@ const Navbar = () => {
                                     to="/register"
                                     className="text-sm font-medium bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition duration-150 ease-in-out shadow-lg transform hover:scale-[1.05]"
                                 >
-                                    Get Started
+                                    Register
                                 </Link>
                             </div>
                         )}

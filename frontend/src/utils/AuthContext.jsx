@@ -8,7 +8,6 @@ export const AuthProvider = ({ children }) => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Check if user is authenticated on mount
         const initAuth = async () => {
             if (authService.isAuthenticated()) {
                 try {
@@ -25,9 +24,10 @@ export const AuthProvider = ({ children }) => {
         initAuth();
     }, []);
 
-    const login = async (username, password) => {
+    const login = async (email , password) => {
         try {
-            await authService.login(username, password);
+            console.log(email , password)
+            await authService.login(email , password);
             const userData = await authService.getUserProfile();
             setUser(userData);
             return { success: true };
@@ -59,6 +59,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         isAuthenticated: !!user,
     };
+    console.log(user)
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

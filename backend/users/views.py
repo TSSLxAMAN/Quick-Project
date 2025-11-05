@@ -1,49 +1,83 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from .serializers import UserSerializer
+from .serializers import CollegeOptionsSerializer
+from .serializers import CourseOptionsSerializer
 
+from django.http import HttpResponseRedirect
+from allauth.account.models import EmailConfirmation, EmailConfirmationHMAC
+from allauth.account.utils import complete_signup
+from .models import College, Course
+from .serializers import CollegeSerializer, CourseSerializer
+from rest_framework import viewsets
+from rest_framework.permissions import IsAdminUser
+from rest_framework.views import APIView
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def user_profile(request):
-    """
-    Get the authenticated user's profile with role information
-    """
     serializer = UserSerializer(request.user)
     print(serializer.data)
     return Response(serializer.data)
 
-
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def dashboard_data(request):
+@permission_classes([AllowAny])
+def confirm_email(request, key):
     """
-    Return role-based dashboard data
+    Confirm email and redirect to frontend
     """
-    user = request.user
-    
-    # Base data for all users
-    data = {
-        'user': UserSerializer(user).data,
-        'role': user.role,
-    }
-    
-    # Role-specific data
-    if user.is_admin:
-        data['dashboard_type'] = 'Admin'
-        data['message'] = 'Welcome to Admin Dashboard'
-        data['permissions'] = ['manage_users', 'view_reports', 'system_settings']
+    try:
+        # Try to get the email confirmation using HMAC
+        email_confirmation = EmailConfirmationHMAC.from_key(key)
+        if not email_confirmation:
+            # Fallback to regular EmailConfirmation model
+            email_confirmation = EmailConfirmation.objects.get(key=key.lower())
         
-    elif user.is_manager:
-        data['dashboard_type'] = 'manager'
-        data['message'] = 'Welcome to Manager Dashboard'
-        data['permissions'] = ['view_reports', 'manage_team']
+        # Confirm the email
+        email_confirmation.confirm(request)
         
-    else:  # Regular user
-        data['dashboard_type'] = 'user'
-        data['message'] = 'Welcome to User Dashboard'
-        data['permissions'] = ['view_profile', 'update_profile']
+        # Redirect to frontend success page
+        return HttpResponseRedirect('http://localhost:5173/email-verified')
+        
+    except Exception as e:
+        print(f"Email confirmation error: {str(e)}")  # Debug
+        # If confirmation fails, redirect to error page
+        return HttpResponseRedirect('http://localhost:5173/login?error=invalid_token')
+
+class CollegeViewSet(viewsets.ModelViewSet):
+    queryset = College.objects.all().order_by('-created_at')
+    serializer_class = CollegeSerializer
+    def get_permissions(self):
+        if self.request.method in ['GET', 'HEAD', 'OPTIONS']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+
+class CourseViewSet(viewsets.ModelViewSet):
+    queryset = Course.objects.all().order_by('-created_at')
+    serializer_class = CourseSerializer
+    def get_permissions(self):
+        if self.request.method in ['GET', 'HEAD', 'OPTIONS']:
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+        return [permission() for permission in permission_classes]
+
+class CollegeOptions(APIView):
+    permission_classes = [AllowAny] 
+    def get(self,request):
+        queryset = College.objects.all()
+        serializer = CollegeOptionsSerializer(queryset,many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class CourseOptions(APIView):
+    permission_classes = [AllowAny]
+    def get(self,request):
+        queryset = Course.objects.all()
+        serializer = CourseOptionsSerializer(queryset,many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
-    return Response(data)

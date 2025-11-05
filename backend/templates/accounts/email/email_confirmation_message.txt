@@ -1,0 +1,14 @@
+Hello from AssignMatch!
+
+You're receiving this email because {{ user.username }} has registered an account on AssignMatch.
+
+To confirm your email address, please click the link below:
+
+{{ activate_url }}
+
+This link will expire in 24 hours.
+
+If you didn't create an account, you can safely ignore this email.
+
+Thank you,
+The AssignMatch Team

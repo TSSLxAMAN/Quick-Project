@@ -11,7 +11,6 @@ const Register = () => {
         first_name: '',
         last_name: '',
     });
-    console.log(formData)
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -37,9 +36,12 @@ const Register = () => {
         setLoading(true);
 
         const result = await register(formData);
-
+        console.log(result)
         if (result.success) {
-            navigate('/login', { state: { message: 'Registration successful! Please login.' } });
+            // Redirect to email verification pending page
+            navigate('/email-verification-pending', {
+                state: { email: formData.email }
+            });
         } else {
             const errorMsg = result.error?.username?.[0] ||
                 result.error?.email?.[0] ||
@@ -185,6 +187,12 @@ const Register = () => {
                                 <Link to="/login" className="text-indigo-400 hover:text-indigo-300 font-medium transition-colors">
                                     Login here
                                 </Link>
+                            </p>
+                        </div>
+
+                        <div className="mt-4 p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-lg">
+                            <p className="text-indigo-300 text-xs text-center">
+                                📧 You'll receive a verification email after registration
                             </p>
                         </div>
                     </div>
