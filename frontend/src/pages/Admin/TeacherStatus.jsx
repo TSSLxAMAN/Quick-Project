@@ -260,7 +260,7 @@ const TeacherStatus = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="bg-gray-900 rounded-xl p-6 border border-gray-700">
                         <div className={`text-3xl mb-2 ${activeTab === 'pending' ? 'text-yellow-400' :
-                                activeTab === 'verified' ? 'text-green-400' : 'text-red-400'
+                            activeTab === 'verified' ? 'text-green-400' : 'text-red-400'
                             }`}>
                             {activeTab === 'pending' ? '⏳' : activeTab === 'verified' ? '✓' : '✗'}
                         </div>
@@ -357,10 +357,10 @@ const TeacherStatus = () => {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${teacher.status === 'PENDING'
-                                                        ? 'bg-yellow-900/30 text-yellow-400'
-                                                        : teacher.status === 'APPROVED' || teacher.verified
-                                                            ? 'bg-green-900/30 text-green-400'
-                                                            : 'bg-red-900/30 text-red-400'
+                                                    ? 'bg-yellow-900/30 text-yellow-400'
+                                                    : teacher.status === 'APPROVED' || teacher.verified
+                                                        ? 'bg-green-900/30 text-green-400'
+                                                        : 'bg-red-900/30 text-red-400'
                                                     }`}>
                                                     {teacher.status}
                                                 </span>
@@ -387,10 +387,10 @@ const TeacherStatus = () => {
                         <div className="bg-gray-800 rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto border border-gray-700">
                             {/* Modal Header */}
                             <div className={`bg-gradient-to-r ${activeTab === 'pending'
-                                    ? 'from-yellow-600 to-orange-600'
-                                    : activeTab === 'verified'
-                                        ? 'from-green-600 to-emerald-600'
-                                        : 'from-red-600 to-rose-600'
+                                ? 'from-yellow-600 to-orange-600'
+                                : activeTab === 'verified'
+                                    ? 'from-green-600 to-emerald-600'
+                                    : 'from-red-600 to-rose-600'
                                 } px-6 py-4 flex justify-between items-center`}>
                                 <h2 className="text-2xl font-bold text-white">
                                     {activeTab === 'pending' ? 'Pending' :
@@ -438,10 +438,10 @@ const TeacherStatus = () => {
                                         <div>
                                             <label className="text-sm text-gray-500">Status</label>
                                             <p className={`font-semibold ${selectedTeacher.status === 'PENDING'
-                                                    ? 'text-yellow-400'
-                                                    : selectedTeacher.status === 'APPROVED' || selectedTeacher.verified
-                                                        ? 'text-green-400'
-                                                        : 'text-red-400'
+                                                ? 'text-yellow-400'
+                                                : selectedTeacher.status === 'APPROVED' || selectedTeacher.verified
+                                                    ? 'text-green-400'
+                                                    : 'text-red-400'
                                                 }`}>
                                                 {selectedTeacher.status}
                                             </p>

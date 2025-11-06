@@ -119,9 +119,8 @@ const StudentStatus = () => {
 
     setActionLoading(true);
     try {
-      await api.post('/student/approve/', {
+      await api.post('/student/studentReject/', {
         email: student.email,
-        action: 'REJECT'
       });
 
       setMessage({
@@ -149,9 +148,8 @@ const StudentStatus = () => {
 
     setActionLoading(true);
     try {
-      await api.post('/student/approve/', {
+      await api.post('/student/studentBlock/', {
         email: student.email,
-        action: 'BLOCK'
       });
 
       setMessage({

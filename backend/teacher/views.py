@@ -90,3 +90,37 @@ class TeacherApprove(APIView):
                 }            
             )
     
+class TeacherReject(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    def post(self, request):
+        email = request.data.get("email")
+        teacher = Teacher.objects.get(email=email)
+        teacher.status = "REJECTED"
+        teacher.approved_at = timezone.now()
+        teacher.save()
+
+        print(email)
+        return Response(
+                {
+                    "status":"REJECTED",
+                    "msg":"Teacher rejected"
+                }            
+            )
+            
+class TeacherBlock(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    def post(self, request):
+        email = request.data.get("email")
+        teacher = Teacher.objects.get(email=email)
+        teacher.status = "BLOCKED"
+        teacher.approved_at = timezone.now()
+        teacher.save()
+
+        print(email)
+        return Response(
+                {
+                    "status":"BLOCKED",
+                    "msg":"Teacher blocked"
+                }            
+            )
+    

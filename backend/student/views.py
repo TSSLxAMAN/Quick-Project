@@ -89,3 +89,33 @@ class StudentApprove(APIView):
                     "msg":"Student approved"
                 }            
             )
+
+class StudentReject(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    def post(self, request):
+        email = request.data.get("email")
+        student = Student.objects.get(email=email)
+        student.status = "REJECTED"
+        student.save()
+        return Response(
+                {
+                    "status":"REJECTED",
+                    "msg":"Student Rejected"
+                }            
+            )
+
+class StudentBlock(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    def post(self, request):
+        email = request.data.get("email")
+        student = Student.objects.get(email=email)
+        student.status = "BLOCKED"
+        student.save()
+        return Response(
+                {
+                    "status":"BLOCKED",
+                    "msg":"Student Rejected"
+                }            
+            )
+    
+# class StudentClasses

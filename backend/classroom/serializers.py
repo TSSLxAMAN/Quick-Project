@@ -7,8 +7,26 @@ class ClassroomSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Classroom
-        fields = ['id', 'name', 'subject', 'description', 'teacher', 'teacher_name', 'created_at']
+        fields = [ 'id','name', 'subject_code', 'teacher_name']
+        read_only_fields = ['teacher', 'created_at']
+    def validate(self, data):
+        teacher = self.context['request'].user
+        subject_code = data.get('subject_code')
 
+        if subject_code:
+            existing = Classroom.objects.filter(
+                teacher=teacher,
+                subject_code=subject_code
+            )
+            if self.instance:
+                existing = existing.exclude(id=self.instance.id)
+
+            if existing.exists():
+                raise serializers.ValidationError(
+                    {"subject_code": "You already have a class with this subject code."}
+                )
+
+        return data
 
 class JoinRequestSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source='student.username', read_only=True)
