@@ -10,14 +10,16 @@ from django.utils import timezone
 User = get_user_model()
 
 class IsUser(permissions.BasePermission):
-    """Only users with USER role can access"""
     def has_permission(self, request, view):
         return request.user and request.user.is_authenticated and request.user.role == 'USER'
     
 class IsAdmin(permissions.BasePermission):
-    """Only users with USER role can access"""
     def has_permission(self, request, view):
         return request.user and request.user.is_authenticated and request.user.role == 'ADMIN'
+
+class IsStudent(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user and request.user.is_authenticated and request.user.role == 'STUDENT'
 
 class StudentVerificationView(generics.CreateAPIView):
     queryset = Student.objects.all()
