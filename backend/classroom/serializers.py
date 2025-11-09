@@ -3,21 +3,29 @@ from .models import Classroom, JoinRequest, StudentClassroom
 
 
 class ClassroomSerializer(serializers.ModelSerializer):
-    teacher_name = serializers.CharField(source='teacher.username', read_only=True)
+    teacher_name = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Classroom
-        fields = [ 'id','name', 'subject_code', 'teacher_name']
-        read_only_fields = ['teacher', 'created_at']
+        fields = ['id', 'name', 'subject_code', 'description', 'teacher_name']
+        read_only_fields = ['teacher']
+
+    def get_teacher_name(self, obj):
+        return f"{obj.teacher.first_name} {obj.teacher.last_name}"
+
     def validate(self, data):
-        teacher = self.context['request'].user
+        request = self.context.get('request')
+        if not request:
+            return data
+
+        teacher = getattr(request.user, 'teacher_profile', None)
+        if teacher is None:
+            raise serializers.ValidationError("This user is not registered as a teacher.")
+
         subject_code = data.get('subject_code')
 
         if subject_code:
-            existing = Classroom.objects.filter(
-                teacher=teacher,
-                subject_code=subject_code
-            )
+            existing = Classroom.objects.filter(teacher=teacher, subject_code=subject_code)
             if self.instance:
                 existing = existing.exclude(id=self.instance.id)
 

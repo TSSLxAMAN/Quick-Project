@@ -18,30 +18,41 @@ class ClassroomListCreateView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
 
     def get_queryset(self):
-        return Classroom.objects.filter(teacher=self.request.user)
+        teacher = self.request.user.teacher_profile
+        print('xxxxxxxxxxxxxxxxxxx',teacher)
+        return Classroom.objects.filter(teacher=teacher)
+
 
     def perform_create(self, serializer):
-        serializer.save(teacher=self.request.user)
+        teacher = self.request.user.teacher_profile
+        print('xxxxxxxxxxxxxxxxxxx',teacher)
+        serializer.save(teacher=teacher)
 
 class ClassroomDeleteView(generics.DestroyAPIView):
-    queryset = Classroom.objects.all()
     serializer_class = ClassroomSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
 
     def get_queryset(self):
-        return Classroom.objects.filter(teacher=self.request.user)
+        teacher = self.request.user.teacher_profile
+        return Classroom.objects.filter(teacher=teacher)
+
 
 class ClassroomUpdateView(generics.UpdateAPIView):
-    queryset = Classroom.objects.all()
     serializer_class = ClassroomSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
 
     def get_queryset(self):
-        return Classroom.objects.filter(teacher=self.request.user)
+        teacher = self.request.user.teacher_profile
+        return Classroom.objects.filter(teacher=teacher)
 
     def partial_update(self, request, *args, **kwargs):
+        teacher = request.user.teacher_profile
+        instance = self.get_object()
+        if instance.teacher != teacher:
+            return Response({"detail": "You are not allowed to update this class."},
+                            status=status.HTTP_403_FORBIDDEN)
         return super().partial_update(request, *args, **kwargs)
-
+    
 class JoinRequestCreateView(generics.CreateAPIView):
     serializer_class = JoinRequestSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacher]

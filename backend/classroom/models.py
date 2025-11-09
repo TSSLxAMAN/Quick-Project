@@ -2,13 +2,16 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 import uuid
+from teacher.models import Teacher
 
 class Classroom(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     teacher = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        'teacher.Teacher',
         on_delete=models.CASCADE,
-        limit_choices_to={'role': 'TEACHER'}
+        related_name='classrooms',
+        blank=True,
+        null=True
     )
     name = models.CharField(max_length=100)
     subject_code = models.CharField(max_length=100, blank=True, null=True)
@@ -16,7 +19,7 @@ class Classroom(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.name} ({self.teacher.username})"
+        return f"{self.name} "
 
 
 class JoinRequest(models.Model):
