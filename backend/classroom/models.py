@@ -30,11 +30,11 @@ class JoinRequest(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE)
+    classroom = models.ForeignKey('Classroom', on_delete=models.CASCADE, related_name='join_requests')
     student = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        'student.Student',
         on_delete=models.CASCADE,
-        limit_choices_to={'role': 'STUDENT'}
+        related_name='join_requests'
     )
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     requested_at = models.DateTimeField(auto_now_add=True)
@@ -44,14 +44,13 @@ class JoinRequest(models.Model):
         unique_together = ('classroom', 'student')
 
     def __str__(self):
-        return f"{self.student.username} -> {self.classroom.name} ({self.status})"
-
+        return f"{self.student.first_name} -> {self.classroom.name} ({self.status})"
 
 class StudentClassroom(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE)
     student = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
+        'student.Student',
         on_delete=models.CASCADE,
         limit_choices_to={'role': 'STUDENT'}
     )
