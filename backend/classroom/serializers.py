@@ -1,6 +1,7 @@
 from rest_framework import serializers
-from .models import Classroom, JoinRequest, StudentClassroom
+from .models import *
 from teacher.models import Teacher
+from django.utils import timezone
 
 class ClassroomSerializer(serializers.ModelSerializer):
     teacher_name = serializers.SerializerMethodField(read_only=True)
@@ -153,3 +154,99 @@ class StudentJoinRequestSerializer(serializers.ModelSerializer):
         if teacher:
             return f"{teacher.first_name} {teacher.last_name}"
         return None
+
+class AssignmentSerializer(serializers.ModelSerializer):
+    classroom_name = serializers.CharField(source='classroom.name', read_only=True)
+    teacher_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Assignment
+        fields = [
+            'id',
+            'title',
+            'description',
+            'classroom',
+            'classroom_name',
+            'teacher_name',
+            'question_pdf',
+            'resource_pdf',
+            'deadline',
+            'created_at',
+        ]
+        read_only_fields = ['teacher', 'created_at']
+
+    def get_teacher_name(self, obj):
+        teacher = obj.teacher
+        return f"{teacher.first_name} {teacher.last_name}" if teacher else None
+
+    def create(self, validated_data):
+        request = self.context['request']
+        teacher = request.user.teacher_profile
+        validated_data['teacher'] = teacher
+        return super().create(validated_data)
+    
+class StudentAssignmentSerializer(serializers.ModelSerializer):
+    assignment_title = serializers.CharField(source='assignment.title', read_only=True)
+    classroom_name = serializers.CharField(source='assignment.classroom.name', read_only=True)
+    teacher_name = serializers.SerializerMethodField()
+    question_pdf = serializers.SerializerMethodField()
+    deadline = serializers.DateTimeField(source='assignment.deadline', read_only=True)
+    submitted_file = serializers.FileField(required=False)
+
+    class Meta:
+        model = StudentAssignment
+        fields = [
+            'id',
+            'assignment',
+            'assignment_title',
+            'classroom_name',
+            'teacher_name',
+            'question_pdf',
+            'deadline',
+            'submitted_file',
+            'status',
+            'submitted_at',
+            'marks',
+            'plagiarism_score',
+        ]
+        read_only_fields = ['status', 'submitted_at', 'marks', 'plagiarism_score']
+
+    def get_teacher_name(self, obj):
+        teacher = obj.assignment.teacher
+        return f"{teacher.first_name} {teacher.last_name}" if teacher else None
+
+    def get_question_pdf(self, obj):
+        request = self.context.get('request')
+        if obj.assignment.question_pdf:
+            return request.build_absolute_uri(obj.assignment.question_pdf.url)
+        return None
+
+    def create(self, validated_data):
+        student = self.context['request'].user.student_profile
+        assignment = validated_data['assignment']
+
+        # Prevent duplicate submissions
+        if StudentAssignment.objects.filter(student=student, assignment=assignment).exists():
+            raise serializers.ValidationError("You’ve already uploaded this assignment.")
+
+        # Prevent submissions after deadline
+        if timezone.now() > assignment.deadline:
+            raise serializers.ValidationError("Deadline has passed. Submission not allowed.")
+
+        validated_data['student'] = student
+        validated_data['submitted_at'] = timezone.now()
+        validated_data['status'] = 'submitted'
+        return super().create(validated_data)
+    
+class StudentSubmissionStatusSerializer(serializers.Serializer):
+    student_id = serializers.UUIDField()
+    student_name = serializers.CharField()
+    enrollment_no = serializers.CharField()
+    assignment_id = serializers.UUIDField()
+    assignment_title = serializers.CharField()
+    deadline = serializers.DateTimeField()
+    submitted_file = serializers.FileField(allow_null=True)
+    status = serializers.CharField()
+    submitted_at = serializers.DateTimeField(allow_null=True)
+    marks = serializers.FloatField(allow_null=True)
+    plagiarism_score = serializers.FloatField(allow_null=True)

@@ -40,9 +40,9 @@ const UserDashboard = () => {
           checking: false
         });
 
-        if (verificationStatus.student.status != 'NOT_FOUND' && verificationStatus.student.found == true) {
-          navigate()
-        }
+        // if (verificationStatus.student.status != 'NOT_FOUND' && verificationStatus.student.found == true) {
+        //   navigate()
+        // }
       } catch (error) {
         console.error('Failed to check verification status:', error);
         setVerificationStatus({ student: null, teacher: null, checking: false });
@@ -220,8 +220,10 @@ const UserDashboard = () => {
   const teacherPending = verificationStatus.teacher?.status === 'PENDING';
   const studentRejected = verificationStatus.student?.status === 'REJECTED';
   const teacherRejected = verificationStatus.teacher?.status === 'REJECTED';
-  const bothNotFound = verificationStatus.student?.status === 'NOT_FOUND' &&
-    verificationStatus.teacher?.status === 'NOT_FOUND';
+  // const bothNotFound = verificationStatus.student?.status === 'NOT_FOUND' &&
+  // verificationStatus.teacher?.status === 'NOT_FOUND';
+  const canApply = (verificationStatus.student?.status === 'NOT_FOUND') ||
+    (verificationStatus.teacher?.status === 'NOT_FOUND');
 
   return (
     <div className="min-h-screen py-12 px-4">
@@ -318,7 +320,7 @@ const UserDashboard = () => {
           )}
 
           {/* Show forms only if both are not found OR if rejected (after clicking reapply) */}
-          {(bothNotFound || (role && (studentRejected || teacherRejected))) && (
+          {(canApply || (role && (studentRejected || teacherRejected))) && (
             <>
               {/* Message Display */}
               {message.text && (

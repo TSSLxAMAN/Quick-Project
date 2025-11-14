@@ -52,7 +52,8 @@ class StudentClassroom(models.Model):
     student = models.ForeignKey(
         'student.Student',
         on_delete=models.CASCADE,
-        limit_choices_to={'role': 'STUDENT'}
+        limit_choices_to={'role': 'STUDENT'},
+        related_name='student_classrooms'
     )
     joined_at = models.DateTimeField(auto_now_add=True)
 
@@ -61,3 +62,65 @@ class StudentClassroom(models.Model):
 
     def __str__(self):
         return f"{self.student.username} in {self.classroom.name}"
+
+class Assignment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    classroom = models.ForeignKey(
+        'classroom.Classroom',
+        on_delete=models.CASCADE,
+        related_name='assignments'
+    )
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+    resource_pdf = models.FileField(upload_to='assignments/resources/', blank=True, null=True)
+    question_pdf = models.FileField(upload_to='assignments/questions/', blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    deadline = models.DateTimeField()
+    teacher = models.ForeignKey(
+        'teacher.Teacher',
+        on_delete=models.CASCADE,
+        related_name='teacher_assignments'
+    )
+
+    def __str__(self):
+        return f"{self.title} ({self.classroom.name})"
+
+    @property
+    def is_deadline_passed(self):
+        return timezone.now() > self.deadline
+    
+class StudentAssignment(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('submitted', 'Submitted'),
+        ('graded', 'Graded'),
+        ('late', 'Late Submission'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    assignment = models.ForeignKey(
+        'classroom.Assignment',
+        on_delete=models.CASCADE,
+        related_name='submissions'
+    )
+    student = models.ForeignKey(
+        'student.Student',
+        on_delete=models.CASCADE,
+        related_name='submitted_assignments'
+    )
+    submitted_file = models.FileField(upload_to='assignments/submissions/', blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    submitted_at = models.DateTimeField(blank=True, null=True)
+    marks = models.FloatField(blank=True, null=True)
+    plagiarism_score = models.FloatField(blank=True, null=True)
+
+    class Meta:
+        unique_together = ('assignment', 'student')
+
+    def __str__(self):
+        return f"{self.student.first_name} - {self.assignment.title}"
+
+    @property
+    def is_past_deadline(self):
+        return timezone.now() > self.assignment.deadline
+

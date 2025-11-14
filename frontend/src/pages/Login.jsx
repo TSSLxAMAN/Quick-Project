@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../utils/AuthContext';
 
@@ -8,13 +8,19 @@ const Login = () => {
         email: '',
         password: '',
     });
-    // console.log(formData)
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const successMessage = location.state?.message;
 
-    const { login } = useAuth();
+    const { login, user } = useAuth();
     const navigate = useNavigate();
+
+    // Redirect to dashboard if user is already logged in
+    useEffect(() => {
+        if (user) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [user, navigate]);
 
     const handleChange = (e) => {
         setFormData({

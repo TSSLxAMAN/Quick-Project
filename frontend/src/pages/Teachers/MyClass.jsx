@@ -5,7 +5,7 @@ import { X, PlusCircleIcon, Edit2, Trash2, BookOpen } from 'lucide-react';
 import api from '../../services/api';
 
 const MyClass = () => {
-  const { user, loading } = useAuth();
+  const { user, loading } = useAuth();  
   const [classrooms, setClassrooms] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);

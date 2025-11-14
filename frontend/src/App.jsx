@@ -35,6 +35,7 @@ import CreateClass from './pages/Teachers/CreateClass';
 import MyClass from './pages/Teachers/MyClass';
 import StudentRequest from './pages/Teachers/StudentRequest';
 import Assignments from './pages/Teachers/Assignments';
+import Submission from './pages/Teachers/Submission';
 
 function App() {
   return (
@@ -144,7 +145,7 @@ function App() {
               path="/dashboard/teacherDashboard/studentsRequests"
               element={
                 <ProtectedRoute allowedRoles={['TEACHER']}>
-                  <StudentRequest  />
+                  <StudentRequest />
                 </ProtectedRoute>
               }
             />
@@ -153,6 +154,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['TEACHER']}>
                   <Assignments />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/teacherDashboard/submission"
+              element={
+                <ProtectedRoute allowedRoles={['TEACHER']}>
+                  <Submission />
                 </ProtectedRoute>
               }
             />

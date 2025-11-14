@@ -56,7 +56,7 @@ const MyClass = () => {
   const fetchTeachers = async () => {
     try {
       setDataLoading(true);
-      const response = await api.get('/classrooms/university/');
+      const response = await api.get('/classroom/university/');
       setTeachers(response.data);
       setError('');
     } catch (err) {
@@ -100,7 +100,7 @@ const MyClass = () => {
     try {
       setSendingRequests(prev => ({ ...prev, [subjectId]: 'sending' }));
 
-      await api.post('/classroom/join-request/', { classroom_id: subjectId });
+      await api.post('/classroom/joinRequest/', { classroom: subjectId });
 
       setSendingRequests(prev => ({ ...prev, [subjectId]: 'sent' }));
       setSuccessMessage('Join request sent successfully!');
@@ -294,7 +294,7 @@ const MyClass = () => {
 
         {/* Join Class Modal */}
         {showJoinModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="fixed inset-0 backdrop-blur-2xl bg-opacity-75 flex items-center justify-center z-50 p-4">
             <div className="bg-gray-700 rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden">
               <div className="flex justify-between items-center p-6 border-b border-gray-600">
                 <h2 className="text-2xl font-bold text-white">

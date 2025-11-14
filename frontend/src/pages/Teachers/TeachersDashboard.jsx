@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../utils/AuthContext';
-import { SquareUserRound, NotebookPen, PlusCircleIcon  } from 'lucide-react'
+import { SquareUserRound, NotebookPen, PlusCircleIcon, ScrollText  } from 'lucide-react'
 const TeacherDashboard = () => {
     const { user, loading } = useAuth();
 
@@ -46,6 +46,13 @@ const TeacherDashboard = () => {
                     <div className="relative bg-gray-900 rounded-xl shadow-lg p-6 border border-gray-700 hover:border-indigo-500 transition-all">
                         <div className="text-indigo-400 text-4xl mb-3"><PlusCircleIcon size={32}/></div>
                         <h3 className="text-lg font-semibold text-gray-100 mb-2">Create Assignment</h3>
+                    </div>
+                </Link>
+                <Link to="/dashboard/teacherDashboard/submission" className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-pink-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition"></div>
+                    <div className="relative bg-gray-900 rounded-xl shadow-lg p-6 border border-gray-700 hover:border-indigo-500 transition-all">
+                        <div className="text-indigo-400 text-4xl mb-3"><ScrollText size={32}/></div>
+                        <h3 className="text-lg font-semibold text-gray-100 mb-2">Submission</h3>
                     </div>
                 </Link>
             </div>

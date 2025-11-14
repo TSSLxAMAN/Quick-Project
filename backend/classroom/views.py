@@ -8,6 +8,7 @@ from student.models import Student
 class IsStudent(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user and request.user.is_authenticated and request.user.role == 'STUDENT'
+    
 class IsTeacher(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user and request.user.is_authenticated and request.user.role == 'TEACHER'
@@ -130,3 +131,142 @@ class StudentJoinRequestListView(generics.ListAPIView):
     def get_queryset(self):
         student = self.request.user.student_profile
         return JoinRequest.objects.filter(student=student).select_related('classroom__teacher')  
+    
+class AssignmentListCreateView(generics.ListCreateAPIView):
+    serializer_class = AssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
+
+    def get_queryset(self):
+        teacher = self.request.user.teacher_profile
+        return Assignment.objects.filter(teacher=teacher).select_related('classroom')
+
+    def perform_create(self, serializer):
+        teacher = self.request.user.teacher_profile
+        serializer.save(teacher=teacher)
+
+
+# Student: View assignments from classes they are enrolled in
+class StudentAssignmentListView(generics.ListAPIView):
+    serializer_class = AssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
+
+    def get_queryset(self):
+        student = self.request.user.student_profile
+        enrolled_classes = student.student_classrooms.values_list('classroom_id', flat=True)
+        return Assignment.objects.filter(classroom_id__in=enrolled_classes).select_related('teacher', 'classroom')
+    
+class StudentAssignmentsStatusView(generics.ListAPIView):
+    serializer_class = StudentAssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsStudent]
+
+    def list(self, request, *args, **kwargs):
+        student = request.user.student_profile
+
+        # 1. Find all enrolled classrooms for this student
+        enrolled_class_ids = student.student_classrooms.values_list('classroom_id', flat=True)
+
+        # 2. Fetch all assignments for those classrooms
+        assignments = Assignment.objects.filter(classroom_id__in=enrolled_class_ids)
+
+        # 3. Fetch all submissions by this student (to merge data)
+        submissions = {
+            sub.assignment.id: sub
+            for sub in StudentAssignment.objects.filter(student=student)
+        }
+
+        # 4. Build combined response: all assignments, merged with submission data (if exists)
+        response_data = []
+        for assignment in assignments:
+            submission = submissions.get(assignment.id)
+
+            data = {
+                "id": str(submission.id) if submission else None,
+                "assignment": str(assignment.id),
+                "assignment_title": assignment.title,
+                "classroom_name": assignment.classroom.name,
+                "teacher_name": f"{assignment.teacher.first_name} {assignment.teacher.last_name}",
+                "question_pdf": request.build_absolute_uri(assignment.question_pdf.url)
+                    if assignment.question_pdf else None,
+                "deadline": assignment.deadline,
+                "submitted_file": (
+                    request.build_absolute_uri(submission.submitted_file.url)
+                    if submission and submission.submitted_file else None
+                ),
+                "status": submission.status if submission else "pending",
+                "submitted_at": submission.submitted_at if submission else None,
+                "marks": submission.marks if submission else None,
+                "plagiarism_score": submission.plagiarism_score if submission else None,
+            }
+
+            response_data.append(data)
+
+        return Response(response_data, status=status.HTTP_200_OK)
+    
+class StudentAssignmentSubmitView(generics.CreateAPIView):
+    serializer_class = StudentAssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsStudent]
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+class ClassroomSubmissionStatusView(generics.GenericAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
+    serializer_class = StudentSubmissionStatusSerializer
+
+    def get(self, request, classroom_id):
+        teacher = request.user.teacher_profile
+
+        # ✅ Ensure teacher owns the classroom
+        try:
+            classroom = Classroom.objects.get(id=classroom_id, teacher=teacher)
+        except Classroom.DoesNotExist:
+            return Response({'error': 'Classroom not found or unauthorized'}, status=status.HTTP_404_NOT_FOUND)
+
+        # ✅ Fetch all assignments in this classroom
+        assignments = Assignment.objects.filter(classroom=classroom)
+        if not assignments.exists():
+            return Response({'message': 'No assignments found for this classroom.'}, status=status.HTTP_200_OK)
+
+        # ✅ Get all enrolled students
+        enrolled_students = StudentClassroom.objects.filter(classroom=classroom).select_related('student')
+        if not enrolled_students.exists():
+            return Response({'message': 'No students enrolled in this classroom.'}, status=status.HTTP_200_OK)
+
+        # ✅ Get all submissions for those assignments
+        submissions = StudentAssignment.objects.filter(
+            assignment__in=assignments,
+            student__in=[sc.student for sc in enrolled_students]
+        ).select_related('assignment', 'student')
+
+        # Build submission lookup
+        submission_map = {(s.student.id, s.assignment.id): s for s in submissions}
+
+        response_data = []
+        for enrolled in enrolled_students:
+            student = enrolled.student
+            for assignment in assignments:
+                submission = submission_map.get((student.id, assignment.id))
+
+                # ✅ Build submission entry
+                entry = {
+                    "student_id": student.id,
+                    "student_name": f"{student.first_name} {student.last_name}",
+                    "enrollment_no": student.enroll_no,
+                    "assignment_id": assignment.id,
+                    "assignment_title": assignment.title,
+                    "deadline": assignment.deadline,
+                    "question_pdf": request.build_absolute_uri(assignment.question_pdf.url)
+                        if assignment.question_pdf else None,
+                    "submitted_file": (
+                        request.build_absolute_uri(submission.submitted_file.url)
+                        if submission and submission.submitted_file else None
+                    ),
+                    "status": submission.status if submission else "pending",
+                    "submitted_at": submission.submitted_at if submission else None,
+                    "marks": submission.marks if submission else None,
+                    "plagiarism_score": submission.plagiarism_score if submission else None,
+                }
+
+                response_data.append(entry)
+
+        return Response(response_data, status=status.HTTP_200_OK)
