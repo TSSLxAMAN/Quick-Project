@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../utils/AuthContext';
 import api from '../../services/api';
-import { Upload, FileText, Calendar, Clock, Trash2, Plus, X, Search, Filter } from 'lucide-react';
+import { Upload, FileText, Calendar, Clock, Trash2, Plus, X, Search, Filter, Wand2 } from 'lucide-react';
 
 const Assignments = () => {
   const { user, loading } = useAuth();
@@ -20,10 +20,14 @@ const Assignments = () => {
     classroom: '',
     deadline: '',
     question_pdf: null,
-    resource_pdf: null
+    resource_pdf: null,
+    questionMethod: 'upload', // 'upload' or 'generate'
+    numQuestions: '5',
+    difficultyLevel: 'medium',
   });
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [generatingQuestions, setGeneratingQuestions] = useState(false);
 
   useEffect(() => {
     if (user && user.role === 'TEACHER') {
@@ -68,11 +72,71 @@ const Assignments = () => {
     }
   };
 
+  const handleQuestionMethodChange = (method) => {
+    setFormData(prev => ({
+      ...prev,
+      questionMethod: method,
+      question_pdf: null // Reset question PDF when switching methods
+    }));
+    if (formErrors.question_pdf) {
+      setFormErrors(prev => ({ ...prev, question_pdf: '' }));
+    }
+  };
+
+  const handleQuestionTypeToggle = (type) => {
+    setFormData(prev => {
+      const currentTypes = prev.questionTypes;
+      if (currentTypes.includes(type)) {
+        // Don't allow removing if it's the only type selected
+        if (currentTypes.length === 1) return prev;
+        return { ...prev, questionTypes: currentTypes.filter(t => t !== type) };
+      } else {
+        return { ...prev, questionTypes: [...currentTypes, type] };
+      }
+    });
+  };
+
+  const handleGenerateQuestions = async () => {
+    if (!formData.resource_pdf) {
+      setFormErrors(prev => ({ ...prev, resource_pdf: 'Please upload training material first' }));
+      return;
+    }
+
+    setGeneratingQuestions(true);
+    setError('');
+
+    try {
+      // TODO: Replace with actual API call to generate questions
+      const generateData = new FormData();
+      generateData.append('resource_pdf', formData.resource_pdf);
+      generateData.append('num_questions', formData.numQuestions);
+      generateData.append('difficulty_level', formData.difficultyLevel);
+      generateData.append('question_types', JSON.stringify(formData.questionTypes));
+
+      // const response = await api.post('/classroom/generate-questions/', generateData);
+
+      // Simulate API call for now
+      await new Promise(resolve => setTimeout(resolve, 3000));
+
+      alert(`Successfully generated ${formData.numQuestions} ${formData.difficultyLevel} level questions with types: ${formData.questionTypes.join(', ')}`);
+      setFormData(prev => ({ ...prev, question_pdf: new File([''], 'generated_questions.pdf') }));
+    } catch (err) {
+      setError('Failed to generate questions from training material');
+      console.error('Error generating questions:', err);
+    } finally {
+      setGeneratingQuestions(false);
+    }
+  };
+
   const validateForm = () => {
     const errors = {};
     if (!formData.title.trim()) errors.title = 'Title is required';
     if (!formData.classroom) errors.classroom = 'Classroom is required';
     if (!formData.deadline) errors.deadline = 'Deadline is required';
+
+    if (formData.questionMethod === 'upload' && !formData.question_pdf) {
+      errors.question_pdf = 'Question PDF is required';
+    }
 
     const deadlineDate = new Date(formData.deadline);
     if (deadlineDate < new Date()) {
@@ -142,7 +206,11 @@ const Assignments = () => {
       classroom: '',
       deadline: '',
       question_pdf: null,
-      resource_pdf: null
+      resource_pdf: null,
+      questionMethod: 'upload',
+      numQuestions: '5',
+      difficultyLevel: 'medium',
+      questionTypes: ['mcq', 'short_answer']
     });
     setFormErrors({});
   };
@@ -318,7 +386,7 @@ const Assignments = () => {
 
         {/* Create Assignment Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="fixed inset-0 backdrop-blur-2xl bg-opacity-50 flex items-center justify-center p-4 z-50 ">
             <div className="bg-gray-900 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
               <div className="sticky top-0 bg-gray-900 border-b border-gray-700 px-6 py-4 flex justify-between items-center">
                 <h2 className="text-2xl font-bold text-white">Create New Assignment</h2>
@@ -395,38 +463,7 @@ const Assignments = () => {
                   {formErrors.deadline && <p className="text-red-400 text-sm mt-1">{formErrors.deadline}</p>}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Question PDF
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <label className="flex-1 cursor-pointer">
-                      <div className="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-gray-600 rounded-lg hover:border-blue-500 transition-colors">
-                        <Upload className="w-5 h-5 text-gray-400" />
-                        <span className="text-sm text-gray-300">
-                          {formData.question_pdf ? formData.question_pdf.name : 'Upload question PDF'}
-                        </span>
-                      </div>
-                      <input
-                        type="file"
-                        name="question_pdf"
-                        accept=".pdf"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
-                    </label>
-                    {formData.question_pdf && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, question_pdf: null }))}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-
+                {/* Training Material (Resource PDF) - Now First */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Resource PDF (Training Material)
@@ -459,6 +496,180 @@ const Assignments = () => {
                   </div>
                   <p className="text-xs text-gray-400 mt-2">This PDF will be used to train the RAG model for plagiarism detection</p>
                 </div>
+
+                {/* Question Method Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-3">
+                    Question Method <span className="text-red-400">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => handleQuestionMethodChange('upload')}
+                      className={`p-4 rounded-lg border-2 transition-all ${formData.questionMethod === 'upload'
+                          ? 'border-blue-500 bg-blue-900 bg-opacity-20'
+                          : 'border-gray-600 hover:border-gray-500'
+                        }`}
+                    >
+                      <Upload className="w-6 h-6 text-blue-400 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-white">Upload Question PDF</p>
+                      <p className="text-xs text-gray-400 mt-1">Upload pre-made questions</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleQuestionMethodChange('generate')}
+                      className={`p-4 rounded-lg border-2 transition-all ${formData.questionMethod === 'generate'
+                          ? 'border-purple-500 bg-purple-900 bg-opacity-20'
+                          : 'border-gray-600 hover:border-gray-500'
+                        }`}
+                      disabled={!formData.resource_pdf}
+                    >
+                      <Wand2 className="w-6 h-6 text-purple-400 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-white">Generate from Material</p>
+                      <p className="text-xs text-gray-400 mt-1">AI-powered generation</p>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Question Upload/Generate Section */}
+                {formData.questionMethod === 'upload' ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Question PDF
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <label className="flex-1 cursor-pointer">
+                        <div className={`flex items-center gap-3 px-4 py-3 border-2 border-dashed rounded-lg hover:border-blue-500 transition-colors ${formErrors.question_pdf ? 'border-red-500' : 'border-gray-600'}`}>
+                          <Upload className="w-5 h-5 text-gray-400" />
+                          <span className="text-sm text-gray-300">
+                            {formData.question_pdf ? formData.question_pdf.name : 'Upload question PDF'}
+                          </span>
+                        </div>
+                        <input
+                          type="file"
+                          name="question_pdf"
+                          accept=".pdf"
+                          onChange={handleFileChange}
+                          className="hidden"
+                        />
+                      </label>
+                      {formData.question_pdf && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData(prev => ({ ...prev, question_pdf: null }))}
+                          className="text-red-400 hover:text-red-300"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                    {formErrors.question_pdf && <p className="text-red-400 text-sm mt-1">{formErrors.question_pdf}</p>}
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Generate Questions from Training Material
+                    </label>
+                    <div className="bg-gray-800 border border-gray-600 rounded-lg p-4 space-y-4">
+                      <div className="flex items-start gap-3">
+                        <Wand2 className="w-5 h-5 text-purple-400 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm text-gray-300 mb-2">
+                            AI will analyze your training material and generate relevant questions automatically.
+                          </p>
+                          <p className="text-xs text-yellow-400">
+                            ⚠️ This process may take a few minutes depending on the material size
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Number of Questions */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Number of Questions
+                        </label>
+                        <select
+                          name="numQuestions"
+                          value={formData.numQuestions}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white"
+                        >
+                          <option value="3">3 Questions</option>
+                          <option value="5">5 Questions</option>
+                          <option value="10">10 Questions</option>
+                          <option value="15">15 Questions</option>
+                          <option value="20">20 Questions</option>
+                        </select>
+                      </div>
+
+                      {/* Difficulty Level */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Difficulty Level
+                        </label>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, difficultyLevel: 'easy' }))}
+                            className={`px-4 py-2 rounded-lg transition-all ${formData.difficultyLevel === 'easy'
+                                ? 'bg-green-600 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                              }`}
+                          >
+                            Easy
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, difficultyLevel: 'medium' }))}
+                            className={`px-4 py-2 rounded-lg transition-all ${formData.difficultyLevel === 'medium'
+                                ? 'bg-yellow-600 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                              }`}
+                          >
+                            Medium
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, difficultyLevel: 'hard' }))}
+                            className={`px-4 py-2 rounded-lg transition-all ${formData.difficultyLevel === 'hard'
+                                ? 'bg-red-600 text-white'
+                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                              }`}
+                          >
+                            Hard
+                          </button>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleGenerateQuestions}
+                        disabled={!formData.resource_pdf || generatingQuestions}
+                        className="w-full mt-3 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {generatingQuestions ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            Generating Questions...
+                          </>
+                        ) : (
+                          <>
+                            <Wand2 className="w-4 h-4" />
+                            Generate Questions
+                          </>
+                        )}
+                      </button>
+
+                      {formData.question_pdf && formData.questionMethod === 'generate' && (
+                        <div className="mt-3 flex items-center gap-2 text-green-400 text-sm">
+                          <FileText className="w-4 h-4" />
+                          Questions generated successfully!
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-3 pt-4">
                   <button

@@ -102,7 +102,7 @@ const UpcomingSubmit = () => {
     const deadlineDate = new Date(deadline);
     const diff = deadlineDate - now;
 
-    if (diff < 0) return 'Overdue';
+    if (diff < 0) return 'Time Ended';
 
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));

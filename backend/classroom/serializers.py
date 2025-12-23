@@ -196,34 +196,53 @@ class StudentAssignmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentAssignment
         fields = [
-            'id',
-            'assignment',
-            'assignment_title',
-            'classroom_name',
-            'teacher_name',
-            'question_pdf',
-            'deadline',
-            'submitted_file',
-            'status',
-            'submitted_at',
-            'marks',
-            'plagiarism_score',
+            "id",
+            "assignment",
+            "assignment_title",
+            "classroom_name",
+            "teacher_name",
+            "question_pdf",
+            "deadline",
+            "submitted_file",
+
+            "status",
+            "submitted_at",
+
+            # Newly added OCR fields:
+            "extracted_text",
+            "ocr_status",
+            "ocr_error",
+
+            # Teacher-side fields (read-only for student)
+            "marks",
+            "plagiarism_score",
         ]
-        read_only_fields = ['status', 'submitted_at', 'marks', 'plagiarism_score']
+
+        read_only_fields = [
+            "status",
+            "submitted_at",
+
+            "extracted_text",
+            "ocr_status",
+            "ocr_error",
+
+            "marks",
+            "plagiarism_score",
+        ]
 
     def get_teacher_name(self, obj):
         teacher = obj.assignment.teacher
         return f"{teacher.first_name} {teacher.last_name}" if teacher else None
 
     def get_question_pdf(self, obj):
-        request = self.context.get('request')
+        request = self.context.get("request")
         if obj.assignment.question_pdf:
             return request.build_absolute_uri(obj.assignment.question_pdf.url)
         return None
 
     def create(self, validated_data):
-        student = self.context['request'].user.student_profile
-        assignment = validated_data['assignment']
+        student = self.context["request"].user.student_profile
+        assignment = validated_data["assignment"]
 
         # Prevent duplicate submissions
         if StudentAssignment.objects.filter(student=student, assignment=assignment).exists():
@@ -233,9 +252,10 @@ class StudentAssignmentSerializer(serializers.ModelSerializer):
         if timezone.now() > assignment.deadline:
             raise serializers.ValidationError("Deadline has passed. Submission not allowed.")
 
-        validated_data['student'] = student
-        validated_data['submitted_at'] = timezone.now()
-        validated_data['status'] = 'submitted'
+        validated_data["student"] = student
+        validated_data["submitted_at"] = timezone.now()
+        validated_data["status"] = "submitted"
+
         return super().create(validated_data)
     
 class StudentSubmissionStatusSerializer(serializers.Serializer):
@@ -250,3 +270,12 @@ class StudentSubmissionStatusSerializer(serializers.Serializer):
     submitted_at = serializers.DateTimeField(allow_null=True)
     marks = serializers.FloatField(allow_null=True)
     plagiarism_score = serializers.FloatField(allow_null=True)
+
+class StudentAssignmentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StudentAssignment
+        fields = ['id', 'assignment', 'submitted_file']
+        read_only_fields = ['id']
+
+    def create(self, validated_data):
+        return super().create(validated_data)

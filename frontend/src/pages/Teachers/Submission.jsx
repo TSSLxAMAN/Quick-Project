@@ -197,7 +197,7 @@ const Submission = () => {
                                                         </span>
                                                         {deadlinePassed && (
                                                             <span className="bg-red-900 text-red-200 px-2 py-1 rounded text-xs">
-                                                                Overdue
+                                                                Time Endedṇ
                                                             </span>
                                                         )}
                                                     </div>

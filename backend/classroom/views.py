@@ -4,6 +4,8 @@ from .models import Classroom, JoinRequest
 from .serializers import *
 from django.shortcuts import get_object_or_404
 from student.models import Student
+from .utils.ocr_client import extract_text_from_pdf_file
+
 
 class IsStudent(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -88,7 +90,6 @@ class JoinRequestUpdateView(generics.UpdateAPIView):
         instance = self.get_object()
         teacher = request.user.teacher_profile
 
-        # Ensure the teacher owns the classroom
         if instance.classroom.teacher != teacher:
             return Response({'error': 'You are not authorized to manage this request.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -144,8 +145,6 @@ class AssignmentListCreateView(generics.ListCreateAPIView):
         teacher = self.request.user.teacher_profile
         serializer.save(teacher=teacher)
 
-
-# Student: View assignments from classes they are enrolled in
 class StudentAssignmentListView(generics.ListAPIView):
     serializer_class = AssignmentSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
@@ -162,19 +161,15 @@ class StudentAssignmentsStatusView(generics.ListAPIView):
     def list(self, request, *args, **kwargs):
         student = request.user.student_profile
 
-        # 1. Find all enrolled classrooms for this student
         enrolled_class_ids = student.student_classrooms.values_list('classroom_id', flat=True)
 
-        # 2. Fetch all assignments for those classrooms
         assignments = Assignment.objects.filter(classroom_id__in=enrolled_class_ids)
 
-        # 3. Fetch all submissions by this student (to merge data)
         submissions = {
             sub.assignment.id: sub
             for sub in StudentAssignment.objects.filter(student=student)
         }
 
-        # 4. Build combined response: all assignments, merged with submission data (if exists)
         response_data = []
         for assignment in assignments:
             submission = submissions.get(assignment.id)
@@ -207,7 +202,22 @@ class StudentAssignmentSubmitView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsStudent]
 
     def perform_create(self, serializer):
-        serializer.save()
+        submission = serializer.save()
+
+        try:
+            file_path = submission.submitted_file.path
+
+            extracted_text, meta = extract_text_from_pdf_file(file_path)
+
+            submission.extracted_text = extracted_text
+            submission.ocr_status = "success"
+            submission.ocr_error = ""
+            submission.save()
+
+        except Exception as e:
+            submission.ocr_status = "failed"
+            submission.ocr_error = str(e)[:500]
+            submission.save()
 
 class ClassroomSubmissionStatusView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
@@ -216,29 +226,24 @@ class ClassroomSubmissionStatusView(generics.GenericAPIView):
     def get(self, request, classroom_id):
         teacher = request.user.teacher_profile
 
-        # ✅ Ensure teacher owns the classroom
         try:
             classroom = Classroom.objects.get(id=classroom_id, teacher=teacher)
         except Classroom.DoesNotExist:
             return Response({'error': 'Classroom not found or unauthorized'}, status=status.HTTP_404_NOT_FOUND)
 
-        # ✅ Fetch all assignments in this classroom
         assignments = Assignment.objects.filter(classroom=classroom)
         if not assignments.exists():
             return Response({'message': 'No assignments found for this classroom.'}, status=status.HTTP_200_OK)
 
-        # ✅ Get all enrolled students
         enrolled_students = StudentClassroom.objects.filter(classroom=classroom).select_related('student')
         if not enrolled_students.exists():
             return Response({'message': 'No students enrolled in this classroom.'}, status=status.HTTP_200_OK)
 
-        # ✅ Get all submissions for those assignments
         submissions = StudentAssignment.objects.filter(
             assignment__in=assignments,
             student__in=[sc.student for sc in enrolled_students]
         ).select_related('assignment', 'student')
 
-        # Build submission lookup
         submission_map = {(s.student.id, s.assignment.id): s for s in submissions}
 
         response_data = []
@@ -247,7 +252,6 @@ class ClassroomSubmissionStatusView(generics.GenericAPIView):
             for assignment in assignments:
                 submission = submission_map.get((student.id, assignment.id))
 
-                # ✅ Build submission entry
                 entry = {
                     "student_id": student.id,
                     "student_name": f"{student.first_name} {student.last_name}",
