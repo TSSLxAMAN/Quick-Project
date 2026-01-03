@@ -13,7 +13,6 @@ const Assignments = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClassroom, setFilterClassroom] = useState('all');
 
-  // Form state
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -21,10 +20,12 @@ const Assignments = () => {
     deadline: '',
     question_pdf: null,
     resource_pdf: null,
-    questionMethod: 'upload', // 'upload' or 'generate'
+    questionMethod: 'upload',
     numQuestions: '5',
-    difficultyLevel: 'medium',
+    difficultyLevel: 'moderate',
   });
+
+  const [generatedQuestions, setGeneratedQuestions] = useState([]);
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [generatingQuestions, setGeneratingQuestions] = useState(false);
@@ -76,23 +77,19 @@ const Assignments = () => {
     setFormData(prev => ({
       ...prev,
       questionMethod: method,
-      question_pdf: null // Reset question PDF when switching methods
+      question_pdf: null
     }));
+    setGeneratedQuestions([]);
     if (formErrors.question_pdf) {
       setFormErrors(prev => ({ ...prev, question_pdf: '' }));
     }
   };
 
-  const handleQuestionTypeToggle = (type) => {
-    setFormData(prev => {
-      const currentTypes = prev.questionTypes;
-      if (currentTypes.includes(type)) {
-        // Don't allow removing if it's the only type selected
-        if (currentTypes.length === 1) return prev;
-        return { ...prev, questionTypes: currentTypes.filter(t => t !== type) };
-      } else {
-        return { ...prev, questionTypes: [...currentTypes, type] };
-      }
+  const handleQuestionChange = (index, value) => {
+    setGeneratedQuestions(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], question: value };
+      return updated;
     });
   };
 
@@ -106,23 +103,39 @@ const Assignments = () => {
     setError('');
 
     try {
-      // TODO: Replace with actual API call to generate questions
       const generateData = new FormData();
       generateData.append('resource_pdf', formData.resource_pdf);
+      generateData.append('title', formData.title);
+      generateData.append('classroom', formData.classroom);
+      generateData.append('deadline', formData.deadline);
       generateData.append('num_questions', formData.numQuestions);
-      generateData.append('difficulty_level', formData.difficultyLevel);
-      generateData.append('question_types', JSON.stringify(formData.questionTypes));
+      generateData.append('difficulty', formData.difficultyLevel);
 
-      // const response = await api.post('/classroom/generate-questions/', generateData);
+      const response = await api.post('/classroom/assignments/generate-questions/', generateData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-      // Simulate API call for now
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      alert(`Successfully generated ${formData.numQuestions} ${formData.difficultyLevel} level questions with types: ${formData.questionTypes.join(', ')}`);
-      setFormData(prev => ({ ...prev, question_pdf: new File([''], 'generated_questions.pdf') }));
+      if (response.data && response.data.questions) {
+        setGeneratedQuestions(response.data.questions);
+        setFormData(prev => ({ ...prev, question_pdf: new File([''], 'generated_questions.pdf') }));
+      }
     } catch (err) {
-      setError('Failed to generate questions from training material');
       console.error('Error generating questions:', err);
+      if (err.response && err.response.data) {
+        const errorData = err.response.data;
+        if (typeof errorData === 'object') {
+          const errorMessages = Object.entries(errorData)
+            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+            .join('; ');
+          setError(errorMessages || 'Failed to generate questions from training material');
+        } else {
+          setError('Failed to generate questions from training material');
+        }
+      } else {
+        setError('Failed to generate questions from training material');
+      }
     } finally {
       setGeneratingQuestions(false);
     }
@@ -136,6 +149,10 @@ const Assignments = () => {
 
     if (formData.questionMethod === 'upload' && !formData.question_pdf) {
       errors.question_pdf = 'Question PDF is required';
+    }
+
+    if (formData.questionMethod === 'generate' && generatedQuestions.length === 0) {
+      errors.question_pdf = 'Please generate questions first';
     }
 
     const deadlineDate = new Date(formData.deadline);
@@ -160,8 +177,13 @@ const Assignments = () => {
       submitData.append('description', formData.description);
       submitData.append('classroom', formData.classroom);
       submitData.append('deadline', formData.deadline);
+      submitData.append('questionMethod', formData.questionMethod);
 
-      if (formData.question_pdf) {
+      if (formData.questionMethod === 'generate' && generatedQuestions.length > 0) {
+        submitData.append('generated_questions', JSON.stringify(generatedQuestions));
+      }
+
+      if (formData.question_pdf && formData.questionMethod === 'upload') {
         submitData.append('question_pdf', formData.question_pdf);
       }
       if (formData.resource_pdf) {
@@ -179,8 +201,20 @@ const Assignments = () => {
       resetForm();
       setError('');
     } catch (err) {
-      setError('Failed to create assignment');
       console.error('Error creating assignment:', err);
+      if (err.response && err.response.data) {
+        const errorData = err.response.data;
+        if (typeof errorData === 'object') {
+          const errorMessages = Object.entries(errorData)
+            .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+            .join('; ');
+          setError(errorMessages || 'Failed to create assignment');
+        } else {
+          setError('Failed to create assignment');
+        }
+      } else {
+        setError('Failed to create assignment');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -190,7 +224,7 @@ const Assignments = () => {
     if (!window.confirm('Are you sure you want to delete this assignment?')) return;
 
     try {
-      await api.delete(`/classroom/assignments/${id}/`);
+      await api.delete(`/classroom/assignments/${id}/delete`);
       setAssignments(prev => prev.filter(a => a.id !== id));
       setError('');
     } catch (err) {
@@ -209,9 +243,9 @@ const Assignments = () => {
       resource_pdf: null,
       questionMethod: 'upload',
       numQuestions: '5',
-      difficultyLevel: 'medium',
-      questionTypes: ['mcq', 'short_answer']
+      difficultyLevel: 'moderate',
     });
+    setGeneratedQuestions([]);
     setFormErrors({});
   };
 
@@ -394,6 +428,7 @@ const Assignments = () => {
                   onClick={() => {
                     setShowModal(false);
                     resetForm();
+                    setError('');
                   }}
                   className="text-gray-400 hover:text-gray-300"
                 >
@@ -401,7 +436,7 @@ const Assignments = () => {
                 </button>
               </div>
 
-              <div onSubmit={handleSubmit} className="p-6 space-y-6">
+              <div className="p-6 space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     Title <span className="text-red-400">*</span>
@@ -470,7 +505,7 @@ const Assignments = () => {
                   </label>
                   <div className="flex items-center gap-3">
                     <label className="flex-1 cursor-pointer">
-                      <div className="flex items-center gap-3 px-4 py-3 border-2 border-dashed border-gray-600 rounded-lg hover:border-green-500 transition-colors">
+                      <div className={`flex items-center gap-3 px-4 py-3 border-2 border-dashed rounded-lg hover:border-green-500 transition-colors ${formErrors.resource_pdf ? 'border-red-500' : 'border-gray-600'}`}>
                         <Upload className="w-5 h-5 text-gray-400" />
                         <span className="text-sm text-gray-300">
                           {formData.resource_pdf ? formData.resource_pdf.name : 'Upload resource PDF for RAG model'}
@@ -494,6 +529,7 @@ const Assignments = () => {
                       </button>
                     )}
                   </div>
+                  {formErrors.resource_pdf && <p className="text-red-400 text-sm mt-1">{formErrors.resource_pdf}</p>}
                   <p className="text-xs text-gray-400 mt-2">This PDF will be used to train the RAG model for plagiarism detection</p>
                 </div>
 
@@ -507,8 +543,8 @@ const Assignments = () => {
                       type="button"
                       onClick={() => handleQuestionMethodChange('upload')}
                       className={`p-4 rounded-lg border-2 transition-all ${formData.questionMethod === 'upload'
-                          ? 'border-blue-500 bg-blue-900 bg-opacity-20'
-                          : 'border-gray-600 hover:border-gray-500'
+                        ? 'border-blue-500 bg-blue-900 bg-opacity-20'
+                        : 'border-gray-600 hover:border-gray-500'
                         }`}
                     >
                       <Upload className="w-6 h-6 text-blue-400 mx-auto mb-2" />
@@ -520,8 +556,8 @@ const Assignments = () => {
                       type="button"
                       onClick={() => handleQuestionMethodChange('generate')}
                       className={`p-4 rounded-lg border-2 transition-all ${formData.questionMethod === 'generate'
-                          ? 'border-purple-500 bg-purple-900 bg-opacity-20'
-                          : 'border-gray-600 hover:border-gray-500'
+                        ? 'border-purple-500 bg-purple-900 bg-opacity-20'
+                        : 'border-gray-600 hover:border-gray-500'
                         }`}
                       disabled={!formData.resource_pdf}
                     >
@@ -613,28 +649,28 @@ const Assignments = () => {
                             type="button"
                             onClick={() => setFormData(prev => ({ ...prev, difficultyLevel: 'easy' }))}
                             className={`px-4 py-2 rounded-lg transition-all ${formData.difficultyLevel === 'easy'
-                                ? 'bg-green-600 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                              ? 'bg-green-600 text-white'
+                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                               }`}
                           >
                             Easy
                           </button>
                           <button
                             type="button"
-                            onClick={() => setFormData(prev => ({ ...prev, difficultyLevel: 'medium' }))}
-                            className={`px-4 py-2 rounded-lg transition-all ${formData.difficultyLevel === 'medium'
-                                ? 'bg-yellow-600 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                            onClick={() => setFormData(prev => ({ ...prev, difficultyLevel: 'moderate' }))}
+                            className={`px-4 py-2 rounded-lg transition-all ${formData.difficultyLevel === 'moderate'
+                              ? 'bg-yellow-600 text-white'
+                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                               }`}
                           >
-                            Medium
+                            Moderate
                           </button>
                           <button
                             type="button"
                             onClick={() => setFormData(prev => ({ ...prev, difficultyLevel: 'hard' }))}
                             className={`px-4 py-2 rounded-lg transition-all ${formData.difficultyLevel === 'hard'
-                                ? 'bg-red-600 text-white'
-                                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                              ? 'bg-red-600 text-white'
+                              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                               }`}
                           >
                             Hard
@@ -656,16 +692,42 @@ const Assignments = () => {
                         ) : (
                           <>
                             <Wand2 className="w-4 h-4" />
-                            Generate Questions
+                            {generatedQuestions.length > 0 ? 'Re-generate Questions' : 'Generate Questions'}
                           </>
                         )}
                       </button>
 
-                      {formData.question_pdf && formData.questionMethod === 'generate' && (
-                        <div className="mt-3 flex items-center gap-2 text-green-400 text-sm">
-                          <FileText className="w-4 h-4" />
-                          Questions generated successfully!
+                      {/* Display Generated Questions */}
+                      {generatedQuestions.length > 0 && (
+                        <div className="mt-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-green-400">
+                              ✓ {generatedQuestions.length} Questions Generated
+                            </p>
+                            <p className="text-xs text-gray-400">You can edit the questions below</p>
+                          </div>
+
+                          <div className="space-y-3 overflow-y-auto pr-2">
+                            {generatedQuestions.map((q, index) => (
+                              <div key={q.question_number} className="bg-gray-700 rounded-lg p-3">
+                                <label className="block text-xs font-medium text-gray-300 mb-1">
+                                  Question {q.question_number}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={q.question}
+                                  onChange={(e) => handleQuestionChange(index, e.target.value)}
+                                  className="w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-white text-sm placeholder-gray-400"
+                                  placeholder="Enter question text..."
+                                />
+                              </div>
+                            ))}
+                          </div>
                         </div>
+                      )}
+
+                      {formErrors.question_pdf && generatedQuestions.length === 0 && (
+                        <p className="text-red-400 text-sm mt-2">{formErrors.question_pdf}</p>
                       )}
                     </div>
                   </div>
@@ -677,6 +739,7 @@ const Assignments = () => {
                     onClick={() => {
                       setShowModal(false);
                       resetForm();
+                      setError('');
                     }}
                     className="flex-1 px-4 py-2 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-800 transition-colors"
                   >

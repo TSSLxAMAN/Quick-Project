@@ -154,7 +154,7 @@ class StudentJoinRequestSerializer(serializers.ModelSerializer):
         if teacher:
             return f"{teacher.first_name} {teacher.last_name}"
         return None
-
+    
 class AssignmentSerializer(serializers.ModelSerializer):
     classroom_name = serializers.CharField(source='classroom.name', read_only=True)
     teacher_name = serializers.SerializerMethodField()
@@ -168,23 +168,81 @@ class AssignmentSerializer(serializers.ModelSerializer):
             'classroom',
             'classroom_name',
             'teacher_name',
+
+            # PDFs
             'question_pdf',
             'resource_pdf',
+
+            # workflow
+            'questionMethod',
+            'questions_ready',
+
+            # RAG metadata (read-only)
+            'rag_collection',
+            'rag_trained',
+            'rag_trained_at',
+
+            # time
             'deadline',
             'created_at',
         ]
-        read_only_fields = ['teacher', 'created_at']
+
+        read_only_fields = [
+            'teacher',
+            'created_at',
+            'questions_ready',
+            'rag_collection',
+            'rag_trained',
+            'rag_trained_at',
+        ]
 
     def get_teacher_name(self, obj):
         teacher = obj.teacher
         return f"{teacher.first_name} {teacher.last_name}" if teacher else None
 
+    def validate(self, attrs):
+        questionMethod = attrs.get('questionMethod')
+        question_pdf = attrs.get('question_pdf')
+        resource_pdf = attrs.get('resource_pdf')
+
+        # Resource PDF is mandatory for both flows
+        if not resource_pdf:
+            raise serializers.ValidationError({
+                "resource_pdf": "Resource PDF is required for training and evaluation."
+            })
+
+        if questionMethod == "upload":
+            # Manual mode → questions must already exist
+            if not question_pdf:
+                raise serializers.ValidationError({
+                    "question_pdf": "Question PDF is required in manual mode."
+                })
+
+        elif questionMethod == "generate":
+            # Generated mode → questions must NOT be provided yet
+            if question_pdf:
+                raise serializers.ValidationError({
+                    "question_pdf": "Do not upload question PDF when using generated mode."
+                })
+
+        else:
+            raise serializers.ValidationError({
+                "questionMethod": "Invalid generation mode."
+            })
+
+        return attrs
+
     def create(self, validated_data):
         request = self.context['request']
         teacher = request.user.teacher_profile
+
         validated_data['teacher'] = teacher
+        validated_data['questions_ready'] = (
+            validated_data.get('questionMethod') == "upload"
+        )
+
         return super().create(validated_data)
-    
+
 class StudentAssignmentSerializer(serializers.ModelSerializer):
     assignment_title = serializers.CharField(source='assignment.title', read_only=True)
     classroom_name = serializers.CharField(source='assignment.classroom.name', read_only=True)
@@ -279,3 +337,33 @@ class StudentAssignmentCreateSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         return super().create(validated_data)
+    
+class AssignmentDraftCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Assignment
+        fields = [
+            'id',
+            'title',
+            'description',
+            'classroom',
+            'resource_pdf',
+            'deadline'
+        ]
+
+    def validate(self, data):
+        if not data.get("resource_pdf"):
+            raise serializers.ValidationError("Resource PDF is required.")
+        return data
+
+class GenerateQuestionsSerializer(serializers.Serializer):
+    num_questions = serializers.IntegerField(min_value=1, max_value=50)
+    difficulty = serializers.ChoiceField(
+        choices=["easy", "moderate", "hard"]
+    )
+    
+class FinalizeAssignmentSerializer(serializers.Serializer):
+    questions = serializers.ListField(
+        child=serializers.CharField(min_length=5),
+        min_length=1
+    )
+

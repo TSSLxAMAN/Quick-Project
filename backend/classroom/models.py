@@ -65,22 +65,75 @@ class StudentClassroom(models.Model):
 
 class Assignment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
     classroom = models.ForeignKey(
         'classroom.Classroom',
         on_delete=models.CASCADE,
         related_name='assignments'
     )
-    title = models.CharField(max_length=255)
-    description = models.TextField(blank=True, null=True)
-    resource_pdf = models.FileField(upload_to='assignments/resources/', blank=True, null=True)
-    question_pdf = models.FileField(upload_to='assignments/questions/', blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    deadline = models.DateTimeField()
+
     teacher = models.ForeignKey(
         'teacher.Teacher',
         on_delete=models.CASCADE,
         related_name='teacher_assignments'
     )
+
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True, null=True)
+
+    # PDFs
+    resource_pdf = models.FileField(
+        upload_to='assignments/resources/',
+        blank=True,
+        null=True
+    )
+
+    question_pdf = models.FileField(
+        upload_to='assignments/questions/',
+        blank=True,
+        null=True
+    )
+
+    # Assignment mode
+    questionMethod = models.CharField(
+        max_length=20,
+        choices=[
+            ("upload", "Upload Manual Questions"),
+            ("generate", "AI Generated Questions"),
+        ],
+        blank=True,
+        null=True
+    )
+
+    questions_ready = models.BooleanField(default=False)
+
+    # RAG metadata
+    rag_collection = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="ChromaDB collection name used for this assignment"
+    )
+
+    rag_trained = models.BooleanField(default=False, blank=True, null=True)
+    rag_trained_at = models.DateTimeField(blank=True, null=True)
+
+    status = models.CharField(
+        max_length=20,
+        choices=[('DRAFT', 'Draft'), ('ACTIVE', 'Active')],
+        default='DRAFT',
+        null=True,
+        blank=True
+    )
+
+
+    deadline = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["rag_collection"]),
+        ]
 
     def __str__(self):
         return f"{self.title} ({self.classroom.name})"
@@ -88,7 +141,7 @@ class Assignment(models.Model):
     @property
     def is_deadline_passed(self):
         return timezone.now() > self.deadline
-    
+
 class StudentAssignment(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),

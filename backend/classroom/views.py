@@ -2,10 +2,16 @@ from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from .models import Classroom, JoinRequest
 from .serializers import *
+from django.db import transaction
+from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from student.models import Student
 from .utils.ocr_client import extract_text_from_pdf_file
-
+from .utils.rag_client import train_rag_from_pdf, generate_rag_collection_name, delete_rag_collection, generate_questions_from_rag
+import os
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+import uuid
 
 class IsStudent(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -38,7 +44,6 @@ class ClassroomDeleteView(generics.DestroyAPIView):
         teacher = self.request.user.teacher_profile
         return Classroom.objects.filter(teacher=teacher)
 
-
 class ClassroomUpdateView(generics.UpdateAPIView):
     serializer_class = ClassroomSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
@@ -70,8 +75,6 @@ class JoinRequestCreateView(generics.CreateAPIView):
 
         serializer.save(classroom=classroom, student=student)
 
-
-
 class TeacherJoinRequestListView(generics.ListAPIView):
     serializer_class = JoinRequestSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
@@ -79,7 +82,6 @@ class TeacherJoinRequestListView(generics.ListAPIView):
     def get_queryset(self):
         teacher = self.request.user.teacher_profile
         return JoinRequest.objects.filter(classroom__teacher=teacher).order_by('-requested_at')
-
 
 class JoinRequestUpdateView(generics.UpdateAPIView):
     queryset = JoinRequest.objects.all()
@@ -143,8 +145,80 @@ class AssignmentListCreateView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         teacher = self.request.user.teacher_profile
-        serializer.save(teacher=teacher)
 
+        resource_pdf = self.request.FILES.get("resource_pdf")
+        if not resource_pdf:
+            raise ValidationError({
+                "resource_pdf": "Resource PDF is required to train the assignment."
+            })
+
+        with transaction.atomic():
+            assignment = serializer.save(
+                teacher=teacher,
+                rag_trained=False
+            )
+
+            collection_name = generate_rag_collection_name(assignment.id)
+
+            try:
+                train_rag_from_pdf(
+                    file_path=assignment.resource_pdf.path,
+                    collection_name=collection_name
+                )
+
+                assignment.rag_collection = collection_name
+                assignment.rag_trained = True
+                assignment.rag_trained_at = timezone.now()
+                assignment.save(update_fields=[
+                    "rag_collection",
+                    "rag_trained",
+                    "rag_trained_at"
+                ])
+
+            except Exception as e:
+                # 🔥 rollback happens automatically
+                raise ValidationError({
+                    "rag": "RAG training failed. Assignment was not created.",
+                    "details": str(e)
+                })
+
+class AssignmentDeleteView(generics.DestroyAPIView):
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
+    queryset = Assignment.objects.all()
+
+    def get_object(self):
+        assignment = super().get_object()
+        if assignment.teacher != self.request.user.teacher_profile:
+            raise PermissionDenied("Not allowed to delete this assignment")
+        return assignment
+
+    def perform_destroy(self, assignment):
+        with transaction.atomic():
+
+            # 1️⃣ Delete RAG collection
+            if assignment.rag_collection:
+                try:
+                    delete_rag_collection(assignment.rag_collection)
+                except Exception as e:
+                    raise ValidationError({
+                        "rag": "Failed to delete RAG collection",
+                        "details": str(e)
+                    })
+
+            # 2️⃣ Delete PDFs from filesystem
+            for file_field in ["resource_pdf", "question_pdf"]:
+                file_obj = getattr(assignment, file_field)
+                if file_obj and os.path.exists(file_obj.path):
+                    os.remove(file_obj.path)
+
+            # 3️⃣ Delete related student submissions
+            StudentAssignment.objects.filter(
+                assignment=assignment
+            ).delete()
+
+            # 4️⃣ Delete assignment DB row
+            assignment.delete()
+    
 class StudentAssignmentListView(generics.ListAPIView):
     serializer_class = AssignmentSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
@@ -274,3 +348,113 @@ class ClassroomSubmissionStatusView(generics.GenericAPIView):
                 response_data.append(entry)
 
         return Response(response_data, status=status.HTTP_200_OK)
+    
+class GenerateAssignmentQuestionsView(generics.GenericAPIView):
+    serializer_class = GenerateQuestionsSerializer
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
+
+    def post(self, request):
+        # 1. Validate file
+        resource_pdf = request.FILES.get("resource_pdf")
+        if not resource_pdf:
+            raise ValidationError({"resource_pdf": "Resource PDF is required."})
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        # 2. Save PDF temporarily
+        temp_name = f"rag_tmp_{uuid.uuid4().hex[:8]}.pdf"
+        temp_path = default_storage.save(
+            f"temp/{temp_name}",
+            ContentFile(resource_pdf.read())
+        )
+        full_path = default_storage.path(temp_path)
+
+        # 3. Create valid collection name
+        collection_name = f"tmp_{uuid.uuid4().hex[:12]}"
+
+        try:
+            # 4. Train RAG
+            train_rag_from_pdf(
+                file_path=full_path,
+                collection_name=collection_name
+            )
+
+            # 5. Generate questions
+            rag_response = generate_questions_from_rag(
+                collection_name=collection_name,
+                num_questions=serializer.validated_data["num_questions"],
+                difficulty=serializer.validated_data["difficulty"]
+            )
+
+        except Exception as e:
+            raise ValidationError({
+                "error": "Failed to generate questions",
+                "details": str(e)
+            })
+
+        finally:
+            # 6. Cleanup PDF
+            default_storage.delete(temp_path)
+
+        # 7. Transform response for frontend
+        questions = [
+            {
+                "question_number": q["question_number"],
+                "question": q["question"]
+            }
+            for q in rag_response.get("questions", [])
+        ]
+
+        return Response({
+            "difficulty": rag_response.get("difficulty"),
+            "total_questions": rag_response.get("total_questions"),
+            "questions": questions
+        }, status=status.HTTP_200_OK)
+    
+class FinalizeAssignmentView(generics.GenericAPIView):
+    serializer_class = FinalizeAssignmentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsTeacher]
+
+    def post(self, request, assignment_id):
+        assignment = get_object_or_404(
+            Assignment,
+            id=assignment_id,
+            teacher=request.user.teacher_profile
+        )
+
+        if not assignment.rag_trained:
+            return Response(
+                {"error": "RAG is not trained"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if assignment.status != "DRAFT":
+            return Response(
+                {"error": "Assignment already finalized"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        questions = serializer.validated_data["questions"]
+
+        # Generate PDF from edited questions
+        pdf_path = generate_questions_pdf(
+            questions=questions,
+            title=assignment.title
+        )
+
+        assignment.question_pdf.save(
+            f"{assignment.id}.pdf",
+            File(open(pdf_path, "rb"))
+        )
+
+        assignment.status = "ACTIVE"
+        assignment.save(update_fields=["question_pdf", "status"])
+
+        return Response(
+            {"message": "Assignment created successfully"},
+            status=status.HTTP_200_OK
+        )

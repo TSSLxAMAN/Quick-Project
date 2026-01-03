@@ -14,9 +14,11 @@ urlpatterns = [
     path('enrolledClasses/', EnrolledClassesView.as_view()),
     path('myJoinRequests/', StudentJoinRequestListView.as_view()),
     path('assignments/', AssignmentListCreateView.as_view()),
+    path('assignments/<uuid:pk>/delete', AssignmentDeleteView.as_view()),
     path('studentAssignments/', StudentAssignmentListView.as_view()),
     path('studentAssignmentsStatus/', StudentAssignmentsStatusView.as_view()),
     path('submitAssignment/', StudentAssignmentSubmitView.as_view()),
     path('class/<uuid:classroom_id>/submissions/', ClassroomSubmissionStatusView.as_view()),
-
+    path("assignments/generate-questions/",GenerateAssignmentQuestionsView.as_view()),
+    path("assignments/finalize/",FinalizeAssignmentView.as_view()),
 ]
