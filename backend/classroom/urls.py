@@ -20,5 +20,6 @@ urlpatterns = [
     path('submitAssignment/', StudentAssignmentSubmitView.as_view()),
     path('class/<uuid:classroom_id>/submissions/', ClassroomSubmissionStatusView.as_view()),
     path("assignments/generate-questions/",GenerateAssignmentQuestionsView.as_view()),
-    path("assignments/finalize/",FinalizeAssignmentView.as_view()),
+    path("assignments/generated/create/",GeneratedAssignmentCreateView.as_view()
+)
 ]

@@ -177,26 +177,40 @@ const Assignments = () => {
       submitData.append('description', formData.description);
       submitData.append('classroom', formData.classroom);
       submitData.append('deadline', formData.deadline);
-      submitData.append('questionMethod', formData.questionMethod);
 
+      // Check if it's a generated assignment or manual upload
       if (formData.questionMethod === 'generate' && generatedQuestions.length > 0) {
-        submitData.append('generated_questions', JSON.stringify(generatedQuestions));
-      }
-
-      if (formData.question_pdf && formData.questionMethod === 'upload') {
-        submitData.append('question_pdf', formData.question_pdf);
-      }
-      if (formData.resource_pdf) {
+        // Use the new API endpoint for generated assignments
+        submitData.append('questions', JSON.stringify(generatedQuestions));
         submitData.append('resource_pdf', formData.resource_pdf);
+
+        const response = await api.post('/classroom/assignments/generated/create/', submitData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        setAssignments(prev => [response.data, ...prev]);
+      } else {
+        // Use the original API endpoint for manual upload
+        submitData.append('questionMethod', formData.questionMethod);
+
+        if (formData.question_pdf) {
+          submitData.append('question_pdf', formData.question_pdf);
+        }
+        if (formData.resource_pdf) {
+          submitData.append('resource_pdf', formData.resource_pdf);
+        }
+
+        const response = await api.post('/classroom/assignments/', submitData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        setAssignments(prev => [response.data, ...prev]);
       }
 
-      const response = await api.post('/classroom/assignments/', submitData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      setAssignments(prev => [response.data, ...prev]);
       setShowModal(false);
       resetForm();
       setError('');
@@ -265,8 +279,8 @@ const Assignments = () => {
   };
 
   const filteredAssignments = assignments.filter(assignment => {
-    const matchesSearch = assignment.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      assignment.classroom_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = (assignment.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      assignment.classroom_name?.toLowerCase().includes(searchTerm.toLowerCase())) ?? true;
     const matchesFilter = filterClassroom === 'all' || assignment.classroom === filterClassroom;
     return matchesSearch && matchesFilter;
   });
@@ -707,7 +721,7 @@ const Assignments = () => {
                             <p className="text-xs text-gray-400">You can edit the questions below</p>
                           </div>
 
-                          <div className="space-y-3 overflow-y-auto pr-2">
+                          <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                             {generatedQuestions.map((q, index) => (
                               <div key={q.question_number} className="bg-gray-700 rounded-lg p-3">
                                 <label className="block text-xs font-medium text-gray-300 mb-1">

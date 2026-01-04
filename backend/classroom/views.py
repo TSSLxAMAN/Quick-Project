@@ -8,9 +8,11 @@ from django.shortcuts import get_object_or_404
 from student.models import Student
 from .utils.ocr_client import extract_text_from_pdf_file
 from .utils.rag_client import train_rag_from_pdf, generate_rag_collection_name, delete_rag_collection, generate_questions_from_rag
+from .utils.generate_questions_pdf import generate_questions_pdf
 import os
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.core.files import File  
 import uuid
 
 class IsStudent(permissions.BasePermission):
@@ -371,7 +373,7 @@ class GenerateAssignmentQuestionsView(generics.GenericAPIView):
         full_path = default_storage.path(temp_path)
 
         # 3. Create valid collection name
-        collection_name = f"tmp_{uuid.uuid4().hex[:12]}"
+        collection_name = f"{uuid.uuid4().hex[:12]}"
 
         try:
             # 4. Train RAG
@@ -412,49 +414,81 @@ class GenerateAssignmentQuestionsView(generics.GenericAPIView):
             "questions": questions
         }, status=status.HTTP_200_OK)
     
-class FinalizeAssignmentView(generics.GenericAPIView):
-    serializer_class = FinalizeAssignmentSerializer
+class GeneratedAssignmentCreateView(generics.GenericAPIView):
+    serializer_class = GeneratedAssignmentCreateSerializer
     permission_classes = [permissions.IsAuthenticated, IsTeacher]
 
-    def post(self, request, assignment_id):
-        assignment = get_object_or_404(
-            Assignment,
-            id=assignment_id,
-            teacher=request.user.teacher_profile
-        )
-
-        if not assignment.rag_trained:
-            return Response(
-                {"error": "RAG is not trained"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        if assignment.status != "DRAFT":
-            return Response(
-                {"error": "Assignment already finalized"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
+    def post(self, request):
+        teacher = request.user.teacher_profile
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        questions = serializer.validated_data["questions"]
-
-        # Generate PDF from edited questions
-        pdf_path = generate_questions_pdf(
-            questions=questions,
-            title=assignment.title
+        data = serializer.validated_data
+        classroom = get_object_or_404(
+            Classroom,
+            id=data["classroom"],
+            teacher=teacher
         )
 
-        assignment.question_pdf.save(
-            f"{assignment.id}.pdf",
-            File(open(pdf_path, "rb"))
-        )
+        with transaction.atomic():
+            # 1️⃣ Create assignment in DRAFT
+            assignment = Assignment.objects.create(
+                classroom=classroom,
+                teacher=teacher,
+                title=data["title"],
+                description=data.get("description"),
+                deadline=data["deadline"],
+                resource_pdf=data["resource_pdf"],
+                questionMethod="generate",
+                status="DRAFT",
+                questions_ready=False,
+                rag_trained=False,
+            )
 
-        assignment.status = "ACTIVE"
-        assignment.save(update_fields=["question_pdf", "status"])
+            # 2️⃣ Generate question PDF
+            pdf_path = generate_questions_pdf(
+                questions=data["questions"],
+                title=assignment.title
+            )
+
+            assignment.question_pdf.save(
+                f"{assignment.id}.pdf",
+                File(open(pdf_path, "rb"))
+            )
+
+            # 🔥 CLEANUP
+            os.remove(pdf_path)
+
+
+            assignment.questions_ready = True
+
+            # 3️⃣ Train RAG permanently
+            collection_name = generate_rag_collection_name(assignment.id)
+
+            try:
+                train_rag_from_pdf(
+                    file_path=assignment.resource_pdf.path,
+                    collection_name=collection_name
+                )
+            except Exception as e:
+                raise ValidationError({
+                    "rag": "RAG training failed",
+                    "details": str(e)
+                })
+
+            # 4️⃣ Finalize assignment
+            assignment.rag_collection = collection_name
+            assignment.rag_trained = True
+            assignment.rag_trained_at = timezone.now()
+            assignment.status = "ACTIVE"
+
+            assignment.save()
 
         return Response(
-            {"message": "Assignment created successfully"},
-            status=status.HTTP_200_OK
+            {
+                "message": "Assignment created successfully",
+                "assignment_id": assignment.id
+            },
+            status=status.HTTP_201_CREATED
         )
+    

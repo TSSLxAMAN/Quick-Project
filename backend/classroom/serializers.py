@@ -361,9 +361,14 @@ class GenerateQuestionsSerializer(serializers.Serializer):
         choices=["easy", "moderate", "hard"]
     )
     
-class FinalizeAssignmentSerializer(serializers.Serializer):
+class GeneratedAssignmentCreateSerializer(serializers.Serializer):
+    title = serializers.CharField()
+    description = serializers.CharField(required=False, allow_blank=True)
+    classroom = serializers.UUIDField()
+    deadline = serializers.DateTimeField()
+    resource_pdf = serializers.FileField()
     questions = serializers.ListField(
-        child=serializers.CharField(min_length=5),
-        min_length=1
+        child=serializers.CharField()
     )
+
 
