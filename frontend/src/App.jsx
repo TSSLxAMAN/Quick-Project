@@ -36,6 +36,7 @@ import MyClass from './pages/Teachers/MyClass';
 import StudentRequest from './pages/Teachers/StudentRequest';
 import Assignments from './pages/Teachers/Assignments';
 import Submission from './pages/Teachers/Submission';
+import CreateQuiz from './pages/Teachers/CreateQuiz';
 
 function App() {
   return (
@@ -162,6 +163,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['TEACHER']}>
                   <Submission />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/teacherDashboard/createQuiz"
+              element={
+                <ProtectedRoute allowedRoles={['TEACHER']}>
+                  <CreateQuiz />
                 </ProtectedRoute>
               }
             />
