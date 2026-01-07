@@ -18,6 +18,7 @@ import StudentDashboard from './pages/Students/StudentDashboard'
 import MyClassStudent from './pages/Students/MyClass'
 import RecentSubmit from './pages/Students/RecentSubmit'
 import UpcomingSubmit from './pages/Students/UpcomingSubmit'
+import Quiz from './pages/Students/Quizes'
 import UserDashboard from './pages/Users/UserDashboard'
 import TeacherStatus from './pages/Admin/TeacherStatus'
 import StudentStatus from './pages/Admin/StudentStatus';
@@ -37,6 +38,7 @@ import StudentRequest from './pages/Teachers/StudentRequest';
 import Assignments from './pages/Teachers/Assignments';
 import Submission from './pages/Teachers/Submission';
 import CreateQuiz from './pages/Teachers/CreateQuiz';
+import QuizSubmission from './pages/Teachers/QuizSubmission';
 
 function App() {
   return (
@@ -175,6 +177,14 @@ function App() {
               }
             />
             <Route
+              path="/dashboard/teacherDashboard/quizSubmission"
+              element={
+                <ProtectedRoute allowedRoles={['TEACHER']}>
+                  <QuizSubmission />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/dashboard/studentDashboard"
               element={
                 <ProtectedRoute allowedRoles={['STUDENT']}>
@@ -203,6 +213,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['STUDENT']}>
                   <UpcomingSubmit />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/studentDashboard/quiz"
+              element={
+                <ProtectedRoute allowedRoles={['STUDENT']}>
+                  <Quiz />
                 </ProtectedRoute>
               }
             />

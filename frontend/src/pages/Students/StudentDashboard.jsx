@@ -32,17 +32,23 @@ const StudentDashboard = () => {
                     <div className="relative bg-gray-900 rounded-xl shadow-lg p-6 border border-gray-700 hover:border-indigo-500 transition-all">
                         <div className="text-indigo-400 text-4xl mb-3"><NotebookPen size={32} /></div>
                         <h3 className="text-xl font-semibold text-gray-100 mb-2">My Classes</h3>
-                        
+
                     </div>
                 </Link>
 
-                
-                
                 <Link to="/dashboard/studentDashboard/upcomingSubmit" className="relative group">
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-pink-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition"></div>
                     <div className="relative bg-gray-900 rounded-xl shadow-lg p-6 border border-gray-700 hover:border-indigo-500 transition-all">
                         <div className="text-indigo-400 text-4xl mb-3"><Megaphone size={32} /></div>
                         <h3 className="text-xl font-semibold text-gray-100 mb-2">Student Submission</h3>
+                    </div>
+                </Link>
+                
+                <Link to="/dashboard/studentDashboard/quiz" className="relative group">
+                    <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-pink-500 rounded-xl blur opacity-20 group-hover:opacity-40 transition"></div>
+                    <div className="relative bg-gray-900 rounded-xl shadow-lg p-6 border border-gray-700 hover:border-indigo-500 transition-all">
+                        <div className="text-indigo-400 text-4xl mb-3"><Megaphone size={32} /></div>
+                        <h3 className="text-xl font-semibold text-gray-100 mb-2">Quiz</h3>
                     </div>
                 </Link>
             </div>
