@@ -14,6 +14,8 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 from django.core.files import File  
 import uuid
+from classroom.utils.celery_scheduler import schedule_assignment_evaluation
+
 
 class IsStudent(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -157,6 +159,7 @@ class AssignmentListCreateView(generics.ListCreateAPIView):
         with transaction.atomic():
             assignment = serializer.save(
                 teacher=teacher,
+                status = 'ACTIVE',
                 rag_trained=False
             )
 
@@ -176,6 +179,7 @@ class AssignmentListCreateView(generics.ListCreateAPIView):
                     "rag_trained",
                     "rag_trained_at"
                 ])
+                schedule_assignment_evaluation(assignment)
 
             except Exception as e:
                 # 🔥 rollback happens automatically
@@ -483,6 +487,8 @@ class GeneratedAssignmentCreateView(generics.GenericAPIView):
             assignment.status = "ACTIVE"
 
             assignment.save()
+            schedule_assignment_evaluation(assignment)
+
 
         return Response(
             {
