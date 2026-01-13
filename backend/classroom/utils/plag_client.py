@@ -1,52 +1,46 @@
 import requests
-from django.conf import settings
-from typing import List
+from requests.exceptions import RequestException
+from decouple import config
 
-PLAG_SERVICE_URL = getattr(
-    settings,
-    "PLAGIARISM_SERVICE_URL",
-    "http://localhost:8002/api/plagiarism/check"
-)
+PLAG_PATH = config("PLAG_PATH")  # e.g. 
+CHECK_URL = f"{PLAG_PATH}/plagiarism/check"
 
-def run_plagiarism_check(assignment, submissions):
-    """
-    Sends all student submissions of an assignment to the
-    plagiarism microservice and returns the results.
-
-    Does NOT write to DB.
-    """
-
+def run_plagiarism_check(
+    assignment_id: str,
+    submissions: list,
+    timeout: int = 120
+):
     payload = {
-        "assignment_group_id": str(assignment.id),
-        "assignments": []
+        "assignment_group_id": str(assignment_id),
+        "assignments": submissions
     }
 
-    for sub in submissions:
-        if not sub.extracted_text:
-            continue  # safety guard
+    try:
+        resp = requests.post(
+            CHECK_URL,
+            json=payload,
+            timeout=timeout
+        )
+        resp.raise_for_status()
+        return resp.json()
 
-        payload["assignments"].append({
+    except RequestException as e:
+        # Let caller decide retry / rollback
+        raise RuntimeError(f"Plagiarism check failed: {str(e)}")
+
+def build_plagiarism_payload(assignment, student_assignments):
+
+    submissions = []
+
+    for sub in student_assignments:
+        if not sub.extracted_text:
+            continue  # skip OCR failures
+
+        submissions.append({
             "assignment_id": str(sub.id),
             "student_id": str(sub.student.id),
             "extracted_text": sub.extracted_text,
             "submitted_at": sub.submitted_at.isoformat()
         })
 
-    if len(payload["assignments"]) < 2:
-        # No plagiarism possible
-        return {
-            "success": True,
-            "results": []
-        }
-
-    try:
-        response = requests.post(
-            PLAG_SERVICE_URL,
-            json=payload,
-            timeout=60
-        )
-        response.raise_for_status()
-        return response.json()
-
-    except requests.RequestException as e:
-        raise RuntimeError(f"Plagiarism service failed: {str(e)}")
+    return submissions
