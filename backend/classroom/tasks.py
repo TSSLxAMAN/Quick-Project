@@ -3,8 +3,9 @@ from django.utils import timezone
 from .models import Assignment, StudentAssignment
 from .utils.plag_client import (
     run_plagiarism_check,
-    build_plagiarism_payload
+    build_plagiarism_payload,
 )
+from utils.plagiarism_persistence import save_plagiarism_results
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=30, retry_kwargs={'max_retries': 3})
 def evaluate_assignment_after_deadline(self, assignment_id):

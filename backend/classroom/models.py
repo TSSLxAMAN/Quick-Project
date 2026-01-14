@@ -169,6 +169,7 @@ class StudentAssignment(models.Model):
     submitted_at = models.DateTimeField(blank=True, null=True)
     marks = models.FloatField(blank=True, null=True)
     plagiarism_score = models.FloatField(blank=True, null=True)
+    plagiarism_similarity = models.FloatField(blank=True, null=True)
     correctness_score = models.FloatField(blank=True, null=True)
     final_score = models.FloatField(blank=True, null=True)
     
