@@ -5,6 +5,7 @@ from decouple import config
 
 RAG_PATH = config("RAG_PATH")
 TRAIN_URL = f"{RAG_PATH}/train"
+SCORE_URL = f"{RAG_PATH}/api/score"
 
 def generate_rag_collection_name(assignment_id):
     """
@@ -72,3 +73,29 @@ def generate_questions_from_rag(
 
     resp.raise_for_status()
     return resp.json()
+
+def score_assignment_pdf(
+    collection_name: str,
+    pdf_path: str,
+    timeout: int = 120
+):
+    """
+    Send student assignment PDF to RAG for correctness scoring
+    """
+    try:
+        with open(pdf_path, "rb") as f:
+            files = {"file": f}
+            data = {"collection_name": collection_name}
+
+            resp = requests.post(
+                SCORE_URL,
+                data=data,
+                files=files,
+                timeout=timeout
+            )
+
+        resp.raise_for_status()
+        return resp.json()
+
+    except RequestException as e:
+        raise RuntimeError(f"RAG scoring failed: {str(e)}")
