@@ -3,7 +3,6 @@ from requests.exceptions import RequestException
 from decouple import config
 OCR_PATH = config("OCR_PATH")
 OCR_URL = f"{OCR_PATH}/pdf"
-print(OCR_URL)
 def extract_text_from_pdf_file(file_path, timeout=60):
     try:
         with open(file_path, "rb") as fp:

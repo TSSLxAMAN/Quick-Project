@@ -6,7 +6,6 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
 from student.models import Student
-from .utils.ocr_client import extract_text_from_pdf_file
 from .utils.rag_client import train_rag_from_pdf, generate_rag_collection_name, delete_rag_collection, generate_questions_from_rag
 from .utils.generate_questions_pdf import generate_questions_pdf
 import os
@@ -15,7 +14,7 @@ from django.core.files.base import ContentFile
 from django.core.files import File  
 import uuid
 from classroom.utils.celery_scheduler import schedule_assignment_evaluation
-
+from classroom.tasks import run_ocr_for_submission
 
 class IsStudent(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -282,22 +281,12 @@ class StudentAssignmentSubmitView(generics.CreateAPIView):
     permission_classes = [permissions.IsAuthenticated, IsStudent]
 
     def perform_create(self, serializer):
-        submission = serializer.save()
+        submission = serializer.save(
+            ocr_status="pending"
+        )
 
-        try:
-            file_path = submission.submitted_file.path
-
-            extracted_text, meta = extract_text_from_pdf_file(file_path)
-
-            submission.extracted_text = extracted_text
-            submission.ocr_status = "success"
-            submission.ocr_error = ""
-            submission.save()
-
-        except Exception as e:
-            submission.ocr_status = "failed"
-            submission.ocr_error = str(e)[:500]
-            submission.save()
+        # 🔥 enqueue OCR instead of blocking request
+        run_ocr_for_submission.delay(str(submission.id))
 
 class ClassroomSubmissionStatusView(generics.GenericAPIView):
     permission_classes = [permissions.IsAuthenticated, IsTeacher]

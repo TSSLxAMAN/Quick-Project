@@ -1,12 +1,13 @@
 from celery import shared_task
 from django.utils import timezone
 from .models import Assignment, StudentAssignment
-from .utils.plag_client import (
-    run_plagiarism_check,
-    build_plagiarism_payload,
-)
-from utils.plagiarism_persistence import save_plagiarism_results
+from .utils.plag_client import run_plagiarism_check,    build_plagiarism_payload
+
+from .utils.plagiarism_persistence import save_plagiarism_results
 from .task_helpers import run_rag_grading, finalize_marks
+
+from .models import StudentAssignment
+from .utils.ocr_client import extract_text_from_pdf_file
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=30, retry_kwargs={'max_retries': 3})
 def evaluate_assignment_after_deadline(self, assignment_id):
@@ -55,3 +56,38 @@ def evaluate_assignment_after_deadline(self, assignment_id):
         assignment.save(update_fields=["status"])
 
     return "Evaluation complete"
+
+
+@shared_task(
+    bind=True,
+    autoretry_for=(Exception,),
+    retry_backoff=20,
+    retry_kwargs={"max_retries": 3},
+)
+
+def run_ocr_for_submission(self, submission_id):
+    submission = StudentAssignment.objects.get(id=submission_id)
+
+    try:
+        file_path = submission.submitted_file.path
+        extracted_text, _ = extract_text_from_pdf_file(file_path)
+
+        submission.extracted_text = extracted_text
+        submission.ocr_status = "success"
+        submission.ocr_error = ""
+        submission.save(update_fields=[
+            "extracted_text",
+            "ocr_status",
+            "ocr_error"
+        ])
+
+        return "OCR success"
+
+    except Exception as e:
+        submission.ocr_status = "failed"
+        submission.ocr_error = str(e)[:500]
+        submission.save(update_fields=[
+            "ocr_status",
+            "ocr_error"
+        ])
+        raise
