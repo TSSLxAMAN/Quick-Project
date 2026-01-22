@@ -15,7 +15,24 @@ from django.core.files.base import ContentFile
 from django.core.files import File  
 import uuid
 from classroom.utils.celery_scheduler import schedule_assignment_evaluation
+import json
+from django.utils import timezone
+from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
 
+from users.models import User
+from classroom.models import Classroom, StudentClassroom
+
+from classroom.models import Quiz, StudentQuizResponse
+from classroom.serializers import QuizListSerializer, QuizDetailSerializer
+from classroom.utils.quiz_client import (
+    train_quiz_from_pdf,
+    generate_quiz_questions,
+    save_quiz_questions,
+    delete_quiz_embedding,
+)
 
 class IsStudent(permissions.BasePermission):
     def has_permission(self, request, view):
@@ -498,3 +515,271 @@ class GeneratedAssignmentCreateView(generics.GenericAPIView):
             status=status.HTTP_201_CREATED
         )
     
+def _is_teacher(user: User) -> bool:
+    return getattr(user, "role", None) == "TEACHER"
+
+def _is_student(user: User) -> bool:
+    return getattr(user, "role", None) == "STUDENT"
+
+
+class QuizGenerateQuestionsAPIView(APIView):
+    """
+    Teacher uploads PDF -> train (if needed) -> generate questions from microservice.
+    Supports regenerate by reusing embedding_id.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not _is_teacher(request.user):
+            return Response({"detail": "Only teachers can generate quiz questions."}, status=status.HTTP_403_FORBIDDEN)
+
+        num_questions = int(request.data.get("num_questions", 5))
+        difficulty = (request.data.get("difficulty") or "easy").lower()
+        embedding_id = request.data.get("embedding_id")
+        pdf_file = request.FILES.get("pdf_file")
+
+        # Train only if no embedding_id
+        if not embedding_id:
+            if not pdf_file:
+                return Response({"detail": "pdf_file is required for first-time generation."}, status=status.HTTP_400_BAD_REQUEST)
+            embedding_id = train_quiz_from_pdf(pdf_file)
+
+        questions = generate_quiz_questions(
+            embedding_id=embedding_id,
+            num_questions=num_questions,
+            difficulty=difficulty,
+        )
+
+        return Response({"embedding_id": embedding_id, "questions": questions}, status=status.HTTP_200_OK)
+
+
+class QuizCreateAPIView(APIView):
+    """
+    Teacher creates quiz and stores questions in DB.
+    Model fields used:
+    - start_time, end_time, time_per_question, question_method, resource_pdf, embedding_id, questions
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not _is_teacher(request.user):
+            return Response({"detail": "Only teachers can create quizzes."}, status=status.HTTP_403_FORBIDDEN)
+
+        teacher = request.user.teacher_profile  # Teacher model
+        classroom_id = request.data.get("classroom_id")
+        title = request.data.get("title")
+        description = request.data.get("description", "")
+        question_method = (request.data.get("question_method") or "manual").lower()
+        time_per_question = int(request.data.get("time_per_question", 60))
+
+        start_time = request.data.get("start_time")
+        end_time = request.data.get("end_time")
+
+        embedding_id = request.data.get("embedding_id")
+        pdf_file = request.FILES.get("resource_pdf")
+        questions_raw = request.data.get("questions")
+
+        if not classroom_id or not title or not start_time or not end_time:
+            return Response(
+                {"detail": "classroom_id, title, start_time, end_time are required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        classroom = get_object_or_404(Classroom, id=classroom_id, teacher=teacher)
+
+        # Parse times (expects ISO)
+        try:
+            st = timezone.datetime.fromisoformat(str(start_time).replace("Z", "+00:00"))
+            et = timezone.datetime.fromisoformat(str(end_time).replace("Z", "+00:00"))
+        except Exception:
+            return Response({"detail": "Invalid start_time/end_time format."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Parse questions
+        try:
+            questions = json.loads(questions_raw) if questions_raw else []
+        except Exception:
+            return Response({"detail": "Invalid questions JSON."}, status=status.HTTP_400_BAD_REQUEST)
+
+        quiz = Quiz.objects.create(
+            classroom=classroom,
+            teacher=teacher,
+            title=title,
+            description=description,
+            start_time=st,
+            end_time=et,
+            time_per_question=time_per_question,
+            question_method=question_method,
+            resource_pdf=pdf_file,
+            embedding_id=embedding_id,
+            questions=questions,
+        )
+
+        # Optional: save questions + delete embedding (best effort)
+        if embedding_id:
+            try:
+                save_quiz_questions(embedding_id=embedding_id, questions=questions)
+                delete_quiz_embedding(embedding_id=embedding_id)
+            except Exception:
+                pass
+
+        return Response({"detail": "Quiz created successfully.", "quiz_id": str(quiz.id)}, status=status.HTTP_201_CREATED)
+
+
+class QuizListAPIView(APIView):
+    """
+    Teacher: list own quizzes (optional classroom_id)
+    Student: list quizzes for enrolled classrooms
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        classroom_id = request.query_params.get("classroom_id")
+
+        if _is_teacher(request.user):
+            teacher = request.user.teacher_profile
+            qs = Quiz.objects.filter(teacher=teacher).order_by("-created_at")
+            if classroom_id:
+                qs = qs.filter(classroom_id=classroom_id)
+            return Response(QuizListSerializer(qs, many=True, context={"request": request}).data, status=status.HTTP_200_OK)
+
+        if _is_student(request.user):
+            student = request.user.student_profile  # student.Student model
+            enrolled_ids = StudentClassroom.objects.filter(student=student).values_list("classroom_id", flat=True)
+            qs = Quiz.objects.filter(classroom_id__in=enrolled_ids).order_by("-created_at")
+            return Response(QuizListSerializer(qs, many=True, context={"request": request}).data, status=status.HTTP_200_OK)
+
+        return Response({"detail": "Invalid role."}, status=status.HTTP_403_FORBIDDEN)
+
+
+class QuizDetailAPIView(APIView):
+    """
+    Teacher: full quiz
+    Student: quiz questions without correct answers
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, quiz_id):
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+
+        data = QuizDetailSerializer(quiz, context={"request": request}).data
+
+        if _is_student(request.user):
+            safe_questions = []
+            for q in data.get("questions", []) or []:
+                q2 = dict(q)
+                q2.pop("correct_option", None)
+                safe_questions.append(q2)
+            data["questions"] = safe_questions
+
+        return Response(data, status=status.HTTP_200_OK)
+
+
+class QuizSubmitAPIView(APIView):
+    """
+    Student submits quiz answers.
+    Saves StudentQuizResponse.
+    Model stores answers as dict {question_index: selected_option}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, quiz_id):
+        if not _is_student(request.user):
+            return Response({"detail": "Only students can submit quizzes."}, status=status.HTTP_403_FORBIDDEN)
+
+        quiz = get_object_or_404(Quiz, id=quiz_id)
+
+        # Ensure student is enrolled in that classroom
+        student_profile = request.user.student_profile
+        if not StudentClassroom.objects.filter(student=student_profile, classroom=quiz.classroom).exists():
+            return Response({"detail": "You are not enrolled in this classroom."}, status=status.HTTP_403_FORBIDDEN)
+
+        answers_in = request.data.get("answers")
+        time_taken = request.data.get("time_taken")
+
+        if answers_in is None:
+            return Response({"detail": "answers is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Normalize answers to dict
+        try:
+            if isinstance(answers_in, str):
+                answers_in = json.loads(answers_in)
+
+            if isinstance(answers_in, list):
+                # list like [{"question_index": 0, "selected_option": "2"}]
+                answers = {str(a["question_index"]): str(a["selected_option"]) for a in answers_in}
+            elif isinstance(answers_in, dict):
+                answers = {str(k): str(v) for k, v in answers_in.items()}
+            else:
+                return Response({"detail": "Invalid answers format."}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response({"detail": "Invalid answers format."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Prevent re-submit (since unique_together quiz+student)
+        existing = StudentQuizResponse.objects.filter(quiz=quiz, student=request.user).first()
+        if existing and existing.status == "completed":
+            return Response({"detail": "You have already submitted this quiz."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Score calculation
+        questions = quiz.questions or []
+        total_questions = len(questions)
+        score = 0.0
+
+        for idx, q in enumerate(questions):
+            correct = str(q.get("correct_option"))
+            selected = answers.get(str(idx))
+            if selected is not None and selected == correct:
+                score += 1.0
+
+        obj, _ = StudentQuizResponse.objects.update_or_create(
+            quiz=quiz,
+            student=request.user,
+            defaults={
+                "classroom": quiz.classroom,
+                "answers": answers,
+                "score": score,
+                "total_questions": total_questions,
+                "time_taken": int(time_taken) if time_taken else None,
+                "status": "completed",
+                "submitted_at": timezone.now(),
+            }
+        )
+
+        return Response(
+            {"detail": "Quiz submitted.", "score": score, "total_questions": total_questions, "submission_id": str(obj.id)},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ClassroomQuizSubmissionsAPIView(APIView):
+    """
+    Teacher views submissions for a classroom.
+    GET /api/classroom/class/<classroomId>/quiz-submissions/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, classroom_id):
+        if not _is_teacher(request.user):
+            return Response({"detail": "Only teachers can view submissions."}, status=status.HTTP_403_FORBIDDEN)
+
+        teacher = request.user.teacher_profile
+        classroom = get_object_or_404(Classroom, id=classroom_id, teacher=teacher)
+
+        quizzes = Quiz.objects.filter(classroom=classroom, teacher=teacher)
+        submissions = StudentQuizResponse.objects.filter(quiz__in=quizzes).select_related("student", "quiz").order_by("-submitted_at")
+
+        rows = []
+        for s in submissions:
+            u = s.student
+            rows.append({
+                "student_id": str(u.id),
+                "quiz_id": str(s.quiz_id),
+                "quiz_title": s.quiz.title,
+                "student_name": (getattr(u, "get_full_name", lambda: "")() or getattr(u, "username", None) or getattr(u, "email", "")),
+                "status": s.status,
+                "score": s.score,
+                "total_questions": s.total_questions,
+                "time_taken": s.time_taken,
+                "submitted_at": s.submitted_at,
+            })
+
+        return Response(rows, status=status.HTTP_200_OK)

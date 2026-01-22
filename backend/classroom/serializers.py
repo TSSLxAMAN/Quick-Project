@@ -371,4 +371,127 @@ class GeneratedAssignmentCreateSerializer(serializers.Serializer):
         child=serializers.CharField()
     )
 
+# ------------------------------
+# Quiz Module Serializers
+# ------------------------------
 
+class QuizSerializer(serializers.ModelSerializer):
+    classroom_name = serializers.SerializerMethodField()
+    teacher_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Quiz
+        fields = [
+            "id", "title", "description",
+            "classroom", "classroom_name",
+            "teacher", "teacher_name",
+            "start_time", "end_time",
+            "time_per_question",
+            "question_method",
+            "resource_pdf",
+            "embedding_id",
+            "questions",
+            "created_at",
+        ]
+        read_only_fields = ["id", "teacher", "embedding_id", "created_at"]
+
+    def get_classroom_name(self, obj):
+        return obj.classroom.name if obj.classroom else None
+
+    def get_teacher_name(self, obj):
+        return obj.teacher.user.username if obj.teacher else None
+
+
+class QuizSubmissionRowSerializer(serializers.Serializer):
+    quiz_id = serializers.UUIDField()
+    quiz_title = serializers.CharField()
+    student_id = serializers.UUIDField()
+    student_name = serializers.CharField()
+    enrollment_no = serializers.CharField(allow_null=True, required=False)
+    status = serializers.CharField()
+    score = serializers.FloatField()
+    total_questions = serializers.IntegerField()
+    time_taken = serializers.IntegerField(allow_null=True, required=False)
+    submitted_at = serializers.DateTimeField(allow_null=True, required=False)
+
+# ------------------------------
+# Quiz Module Serializers (List + Detail)
+# ------------------------------
+
+class QuizListSerializer(serializers.ModelSerializer):
+    classroom_name = serializers.SerializerMethodField()
+    teacher_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Quiz
+        fields = [
+            "id",
+            "title",
+            "description",
+            "classroom",
+            "classroom_name",
+            "teacher",
+            "teacher_name",
+            "question_method",
+            "start_time",
+            "end_time",
+            "time_per_question",
+            "created_at",
+        ]
+
+    def get_classroom_name(self, obj):
+        return obj.classroom.name if obj.classroom else None
+
+    def get_teacher_name(self, obj):
+        t = obj.teacher
+        if not t:
+            return None
+        first = getattr(t, "first_name", "")
+        last = getattr(t, "last_name", "")
+        name = f"{first} {last}".strip()
+        return name or getattr(t, "email", None) or str(t)
+
+
+class QuizDetailSerializer(serializers.ModelSerializer):
+    classroom_name = serializers.SerializerMethodField()
+    teacher_name = serializers.SerializerMethodField()
+    resource_pdf_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Quiz
+        fields = [
+            "id",
+            "title",
+            "description",
+            "classroom",
+            "classroom_name",
+            "teacher",
+            "teacher_name",
+            "question_method",
+            "start_time",
+            "end_time",
+            "time_per_question",
+            "resource_pdf_url",
+            "embedding_id",
+            "questions",
+            "created_at",
+        ]
+
+    def get_classroom_name(self, obj):
+        return obj.classroom.name if obj.classroom else None
+
+    def get_teacher_name(self, obj):
+        t = obj.teacher
+        if not t:
+            return None
+        first = getattr(t, "first_name", "")
+        last = getattr(t, "last_name", "")
+        name = f"{first} {last}".strip()
+        return name or getattr(t, "email", None) or str(t)
+
+    def get_resource_pdf_url(self, obj):
+        request = self.context.get("request")
+        if not obj.resource_pdf:
+            return None
+        url = obj.resource_pdf.url
+        return request.build_absolute_uri(url) if request else url
