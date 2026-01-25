@@ -38,7 +38,7 @@ class ClassroomSerializer(serializers.ModelSerializer):
         return data
 
 class JoinRequestSerializer(serializers.ModelSerializer):
-    student_name = serializers.CharField(source='student.first_name', read_only=True)
+    student_name = serializers.SerializerMethodField()
     classroom_name = serializers.CharField(source='classroom.name', read_only=True)
 
     class Meta:
@@ -54,6 +54,14 @@ class JoinRequestSerializer(serializers.ModelSerializer):
             'reviewed_at'
         ]
         read_only_fields = ['student', 'status', 'requested_at', 'reviewed_at']
+
+    def get_student_name(self, obj):
+        student = obj.student
+        if not student:
+            return ""
+        parts = [student.first_name, student.middle_name, student.last_name]
+
+        return " ".join(part for part in parts if part)
 
     def validate(self, attrs):
         request = self.context['request']

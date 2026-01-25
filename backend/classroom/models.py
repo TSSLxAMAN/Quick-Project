@@ -61,7 +61,7 @@ class StudentClassroom(models.Model):
         unique_together = ('classroom', 'student')
 
     def __str__(self):
-        return f"{self.student.username} in {self.classroom.name}"
+        return f"{self.student.user.username} in {self.classroom.name}"
 
 class Assignment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
