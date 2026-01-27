@@ -285,7 +285,6 @@ class StudentAssignmentSubmitView(generics.CreateAPIView):
             ocr_status="pending"
         )
 
-        # 🔥 enqueue OCR instead of blocking request
         run_ocr_for_submission.delay(str(submission.id))
 
 class ClassroomSubmissionStatusView(generics.GenericAPIView):

@@ -6,7 +6,7 @@ def schedule_assignment_evaluation(assignment):
     """
     Schedule Celery task to run exactly at assignment.deadline
     """
-
+    print(assignment)
     # Prevent scheduling in the past
     if assignment.deadline <= timezone.now():
         raise ValueError("Deadline is in the past")

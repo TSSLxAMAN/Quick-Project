@@ -178,6 +178,9 @@ const Assignments = () => {
       submitData.append('classroom', formData.classroom);
       submitData.append('deadline', formData.deadline);
 
+      // Find the selected classroom to get its name
+      const selectedClassroom = classrooms.find(c => c.id === parseInt(formData.classroom));
+
       // Check if it's a generated assignment or manual upload
       if (formData.questionMethod === 'generate' && generatedQuestions.length > 0) {
         // Use the new API endpoint for generated assignments
@@ -190,7 +193,17 @@ const Assignments = () => {
           },
         });
 
-        setAssignments(prev => [response.data, ...prev]);
+        // Enrich the response data with classroom name and ensure all fields are present
+        const enrichedAssignment = {
+          ...response.data,
+          classroom_name: selectedClassroom?.name || '',
+          title: response.data.title || formData.title,
+          description: response.data.description || formData.description,
+          deadline: response.data.deadline || formData.deadline,
+          created_at: response.data.created_at || new Date().toISOString(),
+        };
+
+        setAssignments(prev => [enrichedAssignment, ...prev]);
       } else {
         // Use the original API endpoint for manual upload
         submitData.append('questionMethod', formData.questionMethod);
@@ -208,7 +221,17 @@ const Assignments = () => {
           },
         });
 
-        setAssignments(prev => [response.data, ...prev]);
+        // Enrich the response data with classroom name and ensure all fields are present
+        const enrichedAssignment = {
+          ...response.data,
+          classroom_name: selectedClassroom?.name || '',
+          title: response.data.title || formData.title,
+          description: response.data.description || formData.description,
+          deadline: response.data.deadline || formData.deadline,
+          created_at: response.data.created_at || new Date().toISOString(),
+        };
+
+        setAssignments(prev => [enrichedAssignment, ...prev]);
       }
 
       setShowModal(false);

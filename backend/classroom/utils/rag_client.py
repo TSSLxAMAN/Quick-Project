@@ -5,7 +5,7 @@ from decouple import config
 
 RAG_PATH = config("RAG_PATH")
 TRAIN_URL = f"{RAG_PATH}/train"
-SCORE_URL = f"{RAG_PATH}/api/score"
+SCORE_URL = f"{RAG_PATH}/score"
 
 def generate_rag_collection_name(assignment_id):
     """

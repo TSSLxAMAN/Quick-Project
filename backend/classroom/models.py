@@ -170,6 +170,7 @@ class StudentAssignment(models.Model):
     marks = models.FloatField(blank=True, null=True)
     plagiarism_score = models.FloatField(blank=True, null=True)
     plagiarism_similarity = models.FloatField(blank=True, null=True)
+    plagiarism_status = models.CharField(blank=True, null=True)
     correctness_score = models.FloatField(blank=True, null=True)
     final_score = models.FloatField(blank=True, null=True)
     

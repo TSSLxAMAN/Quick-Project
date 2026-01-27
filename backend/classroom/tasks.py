@@ -11,49 +11,58 @@ from .utils.ocr_client import extract_text_from_pdf_file
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=30, retry_kwargs={'max_retries': 3})
 def evaluate_assignment_after_deadline(self, assignment_id):
-    from django.db import transaction
+    # REMOVED: global transaction.atomic()
+    
+    assignment = Assignment.objects.get(id=assignment_id)
 
-    with transaction.atomic():
-        assignment = Assignment.objects.select_for_update().get(id=assignment_id)
+    if assignment.status == "GRADED":
+        return "Already graded"
 
-        if assignment.status == "GRADED":
-            return "Already graded"
+    # 1. Run Plagiarism Check (Batch)
+    submissions_qs = StudentAssignment.objects.filter(
+        assignment=assignment,
+        status="submitted",
+        extracted_text__isnull=False
+    )
 
-        if timezone.now() < assignment.deadline:
-            return "Deadline not reached"
-
-        submissions_qs = StudentAssignment.objects.filter(
-            assignment=assignment,
-            status="submitted",
-            extracted_text__isnull=False
-        )
-
-        if not submissions_qs.exists():
-            return "No submissions"
-
-        submissions_payload = build_plagiarism_payload(
-            assignment,
-            submissions_qs
-        )
-
+    if submissions_qs.exists():
+        submissions_payload = build_plagiarism_payload(assignment, submissions_qs)
+        
+        # This call handles its own errors
         plagiarism_results = run_plagiarism_check(
             assignment_id=str(assignment.id),
             submissions=submissions_payload
         )
-
+        # This saves to DB in its own atomic block
         save_plagiarism_results(plagiarism_results)
 
-        eligible = StudentAssignment.objects.filter(
-            assignment=assignment,
-            plagiarism_score__gt=0
-        )
+    # 2. Identify who needs RAG (Plag > 0)
+    # Re-fetch from DB to get the updated plagiarism scores
+    eligible_for_rag = StudentAssignment.objects.filter(
+        assignment=assignment,
+        plagiarism_score__gt=0, 
+        status="submitted" # Ensure we don't re-run graded ones
+    )
 
-        run_rag_grading(assignment, eligible)
+    # 3. Identify Cheaters (Plag == 0) and mark them 0 immediately
+    cheaters = StudentAssignment.objects.filter(
+        assignment=assignment,
+        plagiarism_score=0,
+        status="submitted"
+    )
+    for cheater in cheaters:
+        cheater.final_score = 0.0
+        cheater.status = "graded" # Mark them graded so we don't ignore them
+        cheater.save(update_fields=['final_score', 'status'])
 
-        finalize_marks(assignment)
+    # 4. Run RAG Grading
+    run_rag_grading(assignment, eligible_for_rag)
 
-        assignment.status = "GRADED"
-        assignment.save(update_fields=["status"])
+    # 5. Finalize Marks
+    finalize_marks(assignment)
+
+    assignment.status = "GRADED"
+    assignment.save(update_fields=["status"])
 
     return "Evaluation complete"
 
