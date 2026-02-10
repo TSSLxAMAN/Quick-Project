@@ -280,7 +280,7 @@ class StudentAssignmentSerializer(serializers.ModelSerializer):
             "ocr_error",
 
             # Teacher-side fields (read-only for student)
-            "marks",
+            "final_score",
             "plagiarism_score",
         ]
 
@@ -292,7 +292,7 @@ class StudentAssignmentSerializer(serializers.ModelSerializer):
             "ocr_status",
             "ocr_error",
 
-            "marks",
+            "final_score",
             "plagiarism_score",
         ]
 
@@ -334,7 +334,7 @@ class StudentSubmissionStatusSerializer(serializers.Serializer):
     submitted_file = serializers.FileField(allow_null=True)
     status = serializers.CharField()
     submitted_at = serializers.DateTimeField(allow_null=True)
-    marks = serializers.FloatField(allow_null=True)
+    final_score = serializers.FloatField(allow_null=True)
     plagiarism_score = serializers.FloatField(allow_null=True)
 
 class StudentAssignmentCreateSerializer(serializers.ModelSerializer):

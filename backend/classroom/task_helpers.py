@@ -1,7 +1,9 @@
-from .utils.rag_client import score_assignment_pdf
+from .utils.rag_client import score_assignment_text
 from django.db import transaction
 from django.db import transaction
 from .models import StudentAssignment
+import logging
+logger = logging.getLogger(__name__)
 
 
 PLAG_WEIGHT = 0.4
@@ -11,38 +13,40 @@ def run_rag_grading(assignment, eligible_submissions):
     if not assignment.rag_collection:
         raise RuntimeError("Assignment has no RAG collection")
 
-    # Iterate without select_for_update to avoid locking the DB during network calls
     for submission in eligible_submissions:
         try:
-            if not submission.submitted_file:
+            if not submission.extracted_text:
+                logger.warning(f"No extracted text for {submission.id}")
                 continue
 
-            # API CALL
-            rag_response = score_assignment_pdf(
+            rag_response = score_assignment_text(
                 collection_name=assignment.rag_collection,
-                pdf_path=submission.submitted_file.path
+                extracted_text=submission.extracted_text
             )
 
             if not rag_response.get("success"):
-                # Log error but DO NOT raise exception, allow other students to proceed
-                print(f"RAG failed for {submission.id}") 
+                logger.error(f"RAG failed: {rag_response}")
+                submission.correctness_status = "failed"
+                submission.save(update_fields=["correctness_status"])
                 continue
 
             correctness_score = rag_response["score"]
             if correctness_score > 10:
                 correctness_score = round(correctness_score / 10, 2)
 
-            # SAVE TO DB
             submission.correctness_score = correctness_score
-            # REMOVED: submission.marks = ... (Don't overwrite this!)
-            submission.status = "processed_rag" # Intermediate status
-            submission.save(update_fields=["correctness_score", "status"])
+            submission.status = "processed_rag"
+            submission.correctness_status = "graded"
+
+            submission.save(
+                update_fields=["correctness_score", "status", "correctness_status"]
+            )
 
         except Exception as e:
-            # Handle individual failure so one student doesn't stop the whole class
-            submission.ocr_error = str(e) # reusing error field or create a new one
-            submission.save(update_fields=["ocr_error"])
-            continue
+            logger.exception("RAG exception")
+            submission.correctness_status = "error"
+            submission.ocr_error = str(e)
+            submission.save(update_fields=["correctness_status", "ocr_error"])
 
 def finalize_marks(assignment):
     # Fetch everyone who has been processed by RAG

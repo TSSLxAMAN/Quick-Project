@@ -8,63 +8,70 @@ from .task_helpers import run_rag_grading, finalize_marks
 
 from .models import StudentAssignment
 from .utils.ocr_client import extract_text_from_pdf_file
+import logging
+logger = logging.getLogger(__name__)
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=30, retry_kwargs={'max_retries': 3})
 def evaluate_assignment_after_deadline(self, assignment_id):
-    # REMOVED: global transaction.atomic()
-    
+
+    logger.info(f"[TASK START] evaluate_assignment_after_deadline | assignment_id={assignment_id}")
+
     assignment = Assignment.objects.get(id=assignment_id)
+    logger.info(f"[ASSIGNMENT STATUS] {assignment.status}")
 
-    if assignment.status == "GRADED":
-        return "Already graded"
-
-    # 1. Run Plagiarism Check (Batch)
     submissions_qs = StudentAssignment.objects.filter(
         assignment=assignment,
         status="submitted",
         extracted_text__isnull=False
     )
 
+    logger.info(f"[PLAG INPUT COUNT] {submissions_qs.count()}")
+
     if submissions_qs.exists():
-        submissions_payload = build_plagiarism_payload(assignment, submissions_qs)
-        
-        # This call handles its own errors
         plagiarism_results = run_plagiarism_check(
             assignment_id=str(assignment.id),
-            submissions=submissions_payload
+            submissions=build_plagiarism_payload(assignment, submissions_qs)
         )
-        # This saves to DB in its own atomic block
         save_plagiarism_results(plagiarism_results)
 
-    # 2. Identify who needs RAG (Plag > 0)
-    # Re-fetch from DB to get the updated plagiarism scores
-    eligible_for_rag = StudentAssignment.objects.filter(
-        assignment=assignment,
-        plagiarism_score__gt=0, 
-        status="submitted" # Ensure we don't re-run graded ones
-    )
-
-    # 3. Identify Cheaters (Plag == 0) and mark them 0 immediately
     cheaters = StudentAssignment.objects.filter(
         assignment=assignment,
-        plagiarism_score=0,
+        plagiarism_score__lte=0,
         status="submitted"
     )
+
+    logger.info(f"[CHEATERS COUNT] {cheaters.count()}")
+
     for cheater in cheaters:
         cheater.final_score = 0.0
-        cheater.status = "graded" # Mark them graded so we don't ignore them
-        cheater.save(update_fields=['final_score', 'status'])
+        cheater.status = "graded"
+        cheater.save(update_fields=["final_score", "status"])
 
-    # 4. Run RAG Grading
-    run_rag_grading(assignment, eligible_for_rag)
+    eligible_for_rag = list(
+        StudentAssignment.objects.filter(
+            assignment=assignment,
+            plagiarism_score__gt=0,
+            status="submitted",
+            extracted_text__isnull=False
+        )
+    )
 
-    # 5. Finalize Marks
+    logger.info(f"[RAG ELIGIBLE COUNT] {len(eligible_for_rag)}")
+
+    if eligible_for_rag:
+        run_rag_grading(assignment, eligible_for_rag)
+    else:
+        logger.warning("[RAG SKIPPED] No eligible submissions")
+
     finalize_marks(assignment)
 
     assignment.status = "GRADED"
     assignment.save(update_fields=["status"])
 
+    logger.info("[TASK END] Evaluation complete")
+
     return "Evaluation complete"
+
 
 
 @shared_task(

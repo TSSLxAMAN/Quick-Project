@@ -74,26 +74,20 @@ def generate_questions_from_rag(
     resp.raise_for_status()
     return resp.json()
 
-def score_assignment_pdf(
+def score_assignment_text(
     collection_name: str,
-    pdf_path: str,
-    timeout: int = 120
+    extracted_text: str,
+    timeout: int = 420
 ):
-    """
-    Send student assignment PDF to RAG for correctness scoring
-    """
     try:
-        with open(pdf_path, "rb") as f:
-            files = {"file": f}
-            data = {"collection_name": collection_name}
-
-            resp = requests.post(
-                SCORE_URL,
-                data=data,
-                files=files,
-                timeout=timeout
-            )
-
+        resp = requests.post(
+            SCORE_URL,
+            data={
+                "collection_name": collection_name,
+                "extracted_text": extracted_text
+            },
+            timeout=timeout
+        )
         resp.raise_for_status()
         return resp.json()
 

@@ -1,3 +1,4 @@
+from django.db.models import Count, Q
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
 from .models import Classroom, JoinRequest
@@ -268,7 +269,7 @@ class StudentAssignmentsStatusView(generics.ListAPIView):
                 ),
                 "status": submission.status if submission else "pending",
                 "submitted_at": submission.submitted_at if submission else None,
-                "marks": submission.marks if submission else None,
+                "final_score": submission.final_score if submission else None,
                 "plagiarism_score": submission.plagiarism_score if submission else None,
             }
 
@@ -313,30 +314,58 @@ class ClassroomSubmissionStatusView(generics.GenericAPIView):
         ).select_related('assignment', 'student')
 
         submission_map = {(s.student.id, s.assignment.id): s for s in submissions}
+        assignment_stats = (
+            StudentAssignment.objects
+            .filter(assignment__in=assignments)
+            .values('assignment_id')
+            .annotate(
+                submitted_count=Count('id', filter=Q(status__in=['submitted', 'graded', 'late'])),
+                total_submissions=Count('id')
+            )
+        )
 
+        stats_map = {
+            stat['assignment_id']: stat
+            for stat in assignment_stats
+        }
+
+        total_students = enrolled_students.count()
         response_data = []
         for enrolled in enrolled_students:
             student = enrolled.student
             for assignment in assignments:
                 submission = submission_map.get((student.id, assignment.id))
 
+                assignment_stat = stats_map.get(assignment.id, {})
+
                 entry = {
                     "student_id": student.id,
                     "student_name": f"{student.first_name} {student.last_name}",
                     "enrollment_no": student.enroll_no,
+
                     "assignment_id": assignment.id,
                     "assignment_title": assignment.title,
                     "deadline": assignment.deadline,
-                    "question_pdf": request.build_absolute_uri(assignment.question_pdf.url)
-                        if assignment.question_pdf else None,
+
+                    "question_pdf": (
+                        request.build_absolute_uri(assignment.question_pdf.url)
+                        if assignment.question_pdf else None
+                    ),
+
                     "submitted_file": (
                         request.build_absolute_uri(submission.submitted_file.url)
                         if submission and submission.submitted_file else None
                     ),
+
                     "status": submission.status if submission else "pending",
                     "submitted_at": submission.submitted_at if submission else None,
-                    "marks": submission.marks if submission else None,
+                    "final_score": submission.final_score if submission else None,
                     "plagiarism_score": submission.plagiarism_score if submission else None,
+
+                    # 👇 new summary fields
+                    "total_students": total_students,
+                    "submitted_students": assignment_stat.get("submitted_count", 0),
+                    "pending_students": total_students - assignment_stat.get("submitted_count", 0),
                 }
 
                 response_data.append(entry)

@@ -71,11 +71,21 @@ const Submission = () => {
         return Array.isArray(submissions) ? submissions.filter(s => s.assignment_id === assignmentId) : [];
     };
 
-    const getSubmissionStats = (assignmentId) => {
-        const assignmentSubs = getAssignmentSubmissions(assignmentId);
-        const submitted = assignmentSubs.filter(s => s.status === 'submitted').length;
-        const pending = assignmentSubs.filter(s => s.status === 'pending').length;
-        return { submitted, pending, total: assignmentSubs.length };
+    const getAssignmentSummary = (assignmentId) => {
+        const rows = submissions.filter(s => s.assignment_id === assignmentId);
+
+        if (rows.length === 0) {
+            return { total: 0, submitted: 0, pending: 0 };
+        }
+
+        // backend already sends correct values per row
+        const { total_students, submitted_students, pending_students } = rows[0];
+
+        return {
+            total: total_students,
+            submitted: submitted_students,
+            pending: pending_students
+        };
     };
 
     const isDeadlinePassed = (deadline) => {
@@ -172,7 +182,7 @@ const Submission = () => {
                         ) : (
                             <div className="space-y-4">
                                 {classroomAssignments.map((assignment) => {
-                                    const stats = getSubmissionStats(assignment.id);
+                                    const stats = getAssignmentSummary(assignment.id);
                                     const deadlinePassed = isDeadlinePassed(assignment.deadline);
 
                                     return (
@@ -303,7 +313,7 @@ const Submission = () => {
                                                                             </div>
                                                                         </td>
                                                                         <td className="py-3 px-4 text-gray-300">
-                                                                            {submission.marks !== null ? submission.marks : '-'}
+                                                                            {submission.final_score !== null ? submission.final_score : '-'}
                                                                         </td>
                                                                     </tr>
                                                                 ))}
